@@ -17,12 +17,12 @@ binding = "AI"
 [[d1_databases]]
 binding = "DB"
 database_name = "memory-ai-db"
-database_id = "PASTE_D1_ID_HERE"
+database_id = "3a98aa5e-e89a-4914-92c4-67a93d3196d1"
 
 # KV: settings, today's ideas, weekly backups. (No R2: it needs a card, so nothing here stores files.)
 [[kv_namespaces]]
 binding = "KV"
-id = "PASTE_KV_ID_HERE"
+id = "9d3c938b96804a6099143642ceb6f440"
 
 # Vectorize: finds old memories and chats by meaning (1024 dimensions, cosine).
 [[vectorize]]
