@@ -24,11 +24,6 @@ database_id = "3a98aa5e-e89a-4914-92c4-67a93d3196d1"
 binding = "KV"
 id = "9d3c938b96804a6099143642ceb6f440"
 
-# Vectorize: finds old memories and chats by meaning (1024 dimensions, cosine).
-[[vectorize]]
-binding = "VECTORS"
-index_name = "memory-ai-index"
-
 # Every minute: reminders (on the minute), mood check-in and "I miss you" checks. 06:00 IST every day = new "New Today" ideas. Sunday 02:30 IST = weekly text backup in KV.
 [triggers]
 crons = ["* * * * *", "30 0 * * *", "0 21 * * 6"]
