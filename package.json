@@ -1,0 +1,17 @@
+{
+  "name": "memory-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal memory AI: chat, voice, play, daily ideas. Cloudflare Worker + D1 + Vectorize + KV + Groq + OpenRouter + Telegram.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute memory-ai-db --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute memory-ai-db --local --file=schema.sql",
+    "vapid": "node scripts/vapid.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

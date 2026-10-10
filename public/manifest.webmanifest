@@ -1,0 +1,20 @@
+{
+  "name": "Tiny Memory AI",
+  "short_name": "Tiny",
+  "description": "Your private AI friend that remembers everything and reminds you on time.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F2FF",
+  "theme_color": "#F6F2FF",
+  "icons": [
+    { "src": "/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Mood check-in", "url": "/?go=mood", "icons": [{ "src": "/images/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Reminders", "url": "/?go=tasks", "icons": [{ "src": "/images/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

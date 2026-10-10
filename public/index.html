@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F6F2FF">
+<meta name="robots" content="noindex,nofollow">
+<title>Tiny Memory AI</title>
+<meta name="description" content="Your private AI friend that remembers everything. Chat, voice, play and daily ideas.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tiny">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- colourful icon set: every icon is a gradient SVG in the purple and blue palette -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gP" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="22" y2="22"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#60A5FA"/></linearGradient>
+    <linearGradient id="gL" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="22" y2="22"><stop offset="0" stop-color="#C4B5FD"/><stop offset="1" stop-color="#B9D9DC"/></linearGradient>
+  </defs>
+  <symbol id="m-1" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><path d="M8.5 10.5l5 1.8M23.5 10.5l-5 1.8" stroke="#7C3AED" stroke-width="1.9" stroke-linecap="round"/><circle cx="11.5" cy="14.5" r="1.5" fill="#7C3AED"/><circle cx="20.5" cy="14.5" r="1.5" fill="#7C3AED"/><path d="M21.5 17.5c1.2 1.6 1.2 2.8 0 3.4-1.2-.6-1.2-1.8 0-3.4z" fill="#60A5FA"/><path d="M10.5 22.5c1.6-2.4 9.4-2.4 11 0" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="m-2" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><circle cx="11.5" cy="13.5" r="1.6" fill="#7C3AED"/><circle cx="20.5" cy="13.5" r="1.6" fill="#7C3AED"/><path d="M11 22c2.8-2 7.2-2 10 0" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="m-3" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><circle cx="11.5" cy="13.5" r="1.6" fill="#7C3AED"/><circle cx="20.5" cy="13.5" r="1.6" fill="#7C3AED"/><path d="M11.5 21.5h9" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="m-4" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><circle cx="11.5" cy="13.5" r="1.6" fill="#7C3AED"/><circle cx="20.5" cy="13.5" r="1.6" fill="#7C3AED"/><path d="M10.5 19.5c2.6 3.4 8.4 3.4 11 0" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="m-5" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><path d="M8.8 13.5l2.7-2.8 2.7 2.8M17.8 13.5l2.7-2.8 2.7 2.8" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.5 18.5h13c0 4.2-3 6.5-6.5 6.5s-6.5-2.3-6.5-6.5z" fill="#7C3AED"/><path d="M13 22.6c1.6-1.2 4.4-1.2 6 0" stroke="#C4B5FD" stroke-width="1.6" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-mood" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><circle cx="9" cy="10" r="1.2" fill="#7C3AED"/><circle cx="15" cy="10" r="1.2" fill="#7C3AED"/><path d="M8 14c1.2 2.4 6.8 2.4 8 0" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="3" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M10.5 18.5h3" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="g-scramble" viewBox="0 0 32 32"><rect x="3" y="9" width="8.5" height="10" rx="2.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><rect x="12" y="13" width="8.5" height="10" rx="2.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><rect x="21" y="7" width="8" height="10" rx="2.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><path d="M5.5 25.5c5 3 16 3 21 0" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="g-hangman" viewBox="0 0 32 32"><path d="M5 28h14M9 28V4h14v5" stroke="url(#gP)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="23" cy="13" r="3.4" fill="url(#gL)" stroke="url(#gP)" stroke-width="2"/><path d="M23 17v6M19.5 19.5h7" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-3.7A8 8 0 1 1 20 12z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="12" r="1.1" fill="#7C3AED"/><circle cx="12.5" cy="12" r="1.1" fill="#7C3AED"/><circle cx="16" cy="12" r="1.1" fill="#7C3AED"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><rect x="2.5" y="6.5" width="19" height="11" rx="5.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M8 10v4M6 12h4" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="11" r="1.1" fill="#60A5FA"/><circle cx="18" cy="13.2" r="1.1" fill="#7C3AED"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" fill="#A78BFA"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-7.5-4.6-9-9.6C2 7.6 4 5 6.8 5c1.9 0 3.4 1 5.2 3 1.8-2 3.3-3 5.2-3C20 5 22 7.6 21 10.9c-1.5 5-9 9.6-9 9.6z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 2.8A3 3 0 0 0 5 13a3 3 0 0 0 1 4.3A3 3 0 0 0 9 20a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 2.8A3 3 0 0 1 19 13a3 3 0 0 1-1 4.3A3 3 0 0 1 15 20a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M12 7v5l3.2 2" stroke="#7C3AED" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V22" stroke="url(#gP)" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-mic-w" viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V22" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1-1.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 3.5v4h4M8.5 12h7M8.5 15.5h5" stroke="#7C3AED" stroke-width="1.7" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 21.2a2.2 2.2 0 0 0 4 0" stroke="url(#gP)" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-play2" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-micoff" viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="none" stroke="url(#gP)" stroke-width="1.8"/><path d="M5 11.5a7 7 0 0 0 11 5.7M19 11.5v.5M12 18.5V22M3.5 3.5l17 17" stroke="url(#gP)" stroke-width="1.9" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M21.5 2.5 10.5 13.5M21.5 2.5l-6.7 19-4.3-8-8-4.3z" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="#fff"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.7" stroke-linejoin="round"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" stroke="url(#gP)" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="3" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5" stroke="url(#gP)" stroke-width="1.8" fill="none"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4.5L5 21V4.5a1 1 0 0 1 1-1z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="url(#gP)" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="url(#gP)" stroke-width="2.4" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.7z" fill="#fff"/></symbol>
+  <symbol id="i-tg" viewBox="0 0 24 24"><path d="M21.5 3.5 2.8 10.7c-.9.4-.8 1.6.1 1.9l4.5 1.4 1.7 5.3c.2.7 1.1.9 1.6.4l2.5-2.4 4.6 3.4c.6.4 1.4.1 1.6-.6L22.9 5c.2-1-.7-1.9-1.4-1.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 14.3 17 8.5" stroke="#7C3AED" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4.5h-4.5" stroke="url(#gP)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3.5v12m0 0-4.5-4.5M12 15.5l4.5-4.5M4.5 20.5h15" stroke="url(#gP)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="m15.5 15.5 5 5" stroke="url(#gP)" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="url(#gP)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5 4 4 0 0 1 17.5 18z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <!-- idea tags -->
+  <symbol id="t-build" viewBox="0 0 24 24"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.8 7.2 12 12l8.2-4.8M12 12v9.3" stroke="url(#gP)" stroke-width="1.6" fill="none"/></symbol>
+  <symbol id="t-learn" viewBox="0 0 24 24"><path d="M2.5 5.5C5 4.5 8.5 4.6 12 6.5c3.5-1.9 7-2 9.5-1v13c-2.5-1-6-.9-9.5 1-3.5-1.9-7-2-9.5-1z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 6.5v13" stroke="url(#gP)" stroke-width="1.6"/></symbol>
+  <symbol id="t-write" viewBox="0 0 24 24"><path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 0 1 3 3L8 18.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M14.5 6l3.5 3.5" stroke="url(#gP)" stroke-width="1.6"/></symbol>
+  <symbol id="t-design" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 1.6-2.1-.5-1.3.3-2.4 1.6-2.4H17a4 4 0 0 0 4-4C21 6.9 17 3 12 3z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.8" cy="11" r="1.3" fill="#7C3AED"/><circle cx="11" cy="7.4" r="1.3" fill="#60A5FA"/><circle cx="15.4" cy="8" r="1.3" fill="#A78BFA"/></symbol>
+  <symbol id="t-relax" viewBox="0 0 24 24"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <!-- games -->
+  <symbol id="g-ttt" viewBox="0 0 32 32"><path d="M12 4v24M20 4v24M4 12h24M4 20h24" stroke="url(#gP)" stroke-width="2.4" stroke-linecap="round"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#7C3AED" stroke-width="2.2" stroke-linecap="round"/><circle cx="26" cy="26" r="3" stroke="#60A5FA" stroke-width="2.2" fill="none"/></symbol>
+  <symbol id="g-rps" viewBox="0 0 32 32"><path d="M9 17V8.5a1.8 1.8 0 0 1 3.6 0V15M12.6 14V6.5a1.8 1.8 0 0 1 3.6 0V14M16.2 14V7.5a1.8 1.8 0 0 1 3.6 0V15M19.8 15V10.5a1.8 1.8 0 0 1 3.6 0V20a8 8 0 0 1-8 8h-1.5A7.5 7.5 0 0 1 8 22.5L5.2 18a1.8 1.8 0 0 1 3-2z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></symbol>
+  <symbol id="g-word" viewBox="0 0 32 32"><rect x="3" y="9" width="11" height="14" rx="3.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><rect x="18" y="9" width="11" height="14" rx="3.5" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M14 16h4" stroke="#7C3AED" stroke-width="2.2" stroke-linecap="round"/><text x="8.5" y="19.6" font-size="8.5" font-weight="800" text-anchor="middle" fill="#7C3AED" font-family="Inter,sans-serif">A</text><text x="23.5" y="19.6" font-size="8.5" font-weight="800" text-anchor="middle" fill="#60A5FA" font-family="Inter,sans-serif">Z</text></symbol>
+  <symbol id="g-twenty" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8"/><path d="M12 12.5a4 4 0 1 1 5.6 3.6c-1 .5-1.6 1.2-1.6 2.4" stroke="#7C3AED" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="16" cy="23" r="1.4" fill="#60A5FA"/></symbol>
+  <symbol id="g-truth" viewBox="0 0 32 32"><path d="M3 6.5A3.5 3.5 0 0 1 6.5 3h11A3.5 3.5 0 0 1 21 6.5v6a3.5 3.5 0 0 1-3.5 3.5H11l-5 4v-4.2A3.5 3.5 0 0 1 3 12.5z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 19.5v1A3.5 3.5 0 0 0 17.5 24H21l5 4v-4.2a3.5 3.5 0 0 0 3-3.4v-6A3.5 3.5 0 0 0 25.5 11H24" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="g-trivia" viewBox="0 0 32 32"><path d="M16 3a8.5 8.5 0 0 0-5 15.4c.9.7 1.4 1.6 1.4 2.6V22h7.2v-1c0-1 .5-1.9 1.4-2.6A8.5 8.5 0 0 0 16 3z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.5 26h7M13.5 29h5" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/></symbol>
+  <!-- rock paper scissors -->
+  <symbol id="r-rock" viewBox="0 0 32 32"><path d="M7 20c0-6 3-11 9-11s9 5 9 10-4 8-9 8-9-2-9-7z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.9" stroke-linejoin="round"/><path d="M12 15c1.5-1.5 3-1.8 5-1.5" stroke="#7C3AED" stroke-width="1.6" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="r-paper" viewBox="0 0 32 32"><path d="M8 4h11l6 6v18H8z" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.9" stroke-linejoin="round"/><path d="M19 4v6h6M12 16h9M12 21h9" stroke="#7C3AED" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="r-scissors" viewBox="0 0 32 32"><circle cx="9" cy="23" r="4.2" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.9"/><circle cx="23" cy="23" r="4.2" fill="url(#gL)" stroke="url(#gP)" stroke-width="1.9"/><path d="M11.5 19.5 22 5M20.5 19.5 10 5" stroke="url(#gP)" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<div class="app" id="app">
+  <aside class="sidebar glass" id="sidebar" aria-label="Main navigation">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg></div>
+      <div><b id="brandName">Tiny</b><span>your memory AI</span></div>
+    </div>
+    <button class="newchat" id="newChat" type="button"><svg class="ic" style="color:#fff"><use href="#i-plus"/></svg>New chat</button>
+    <nav class="nav" id="nav">
+      <button data-view="chat" class="active"><svg class="ic"><use href="#i-chat"/></svg>Chat</button>
+      <button data-view="play"><svg class="ic"><use href="#i-play"/></svg>Play</button>
+      <button data-view="today"><svg class="ic"><use href="#i-spark"/></svg>New today</button>
+      <button data-view="notes"><svg class="ic"><use href="#i-note"/></svg>Notes</button>
+      <button data-view="tasks"><svg class="ic"><use href="#i-bell"/></svg>Reminders</button>
+      <button data-view="mood"><svg class="ic"><use href="#i-mood"/></svg>Mood</button>
+      <button data-view="persona"><svg class="ic"><use href="#i-heart"/></svg>Act like a girl</button>
+      <button data-view="memory"><svg class="ic"><use href="#i-brain"/></svg>Memory<span class="badge" id="memBadge" hidden>0</span></button>
+      <button data-view="history"><svg class="ic"><use href="#i-clock"/></svg>History</button>
+    </nav>
+    <div class="side-h">Recent chats</div>
+    <div class="recent" id="recent"></div>
+    <div class="side-foot"><span class="dot"></span><span id="footStat">Connecting…</span></div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+
+  <div class="main">
+    <header class="topbar glass">
+      <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu"><svg class="ic"><use href="#i-menu"/></svg></button>
+      <div><h1 id="topTitle">Chat</h1><p id="topSub">Talk about anything. I remember it all.</p></div>
+      <div class="grow"></div>
+      <span class="chip hide-m" id="memChip"><svg class="ic"><use href="#i-brain"/></svg><span id="memCount">0 memories</span></span>
+      <button class="voice-btn" id="voiceOpen" type="button"><svg class="ic"><use href="#i-mic-w"/></svg><span>Voice chat</span></button>
+    </header>
+
+    <div class="views">
+      <!-- CHAT -->
+      <section class="view on glass" id="view-chat" style="border-radius:var(--r-lg)">
+        <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+        <div class="composer-wrap">
+          <div class="dock">
+            <div class="sticker-wrap" id="stickerWrap">
+              <div class="fact-bubble" id="factBubble" role="status">
+                <div class="fb-card">
+                  <div class="fb-head"><svg class="ic" style="width:18px;height:18px"><use href="#i-spark"/></svg><span id="factHead">Idea for today</span></div>
+                  <p id="factText"></p>
+                  <button class="fb-btn" id="factAsk" type="button">Let’s do it</button>
+                </div>
+              </div>
+              <button class="sticker" id="sticker" type="button" aria-label="Tap for an idea">
+                <span class="stk-bob" id="stkBob"><span class="stk-motion" id="stkMotion"><img id="stickerImg" src="/images/stickers/tiny-smile.webp" alt="" width="480" height="560" decoding="async"></span></span><span class="zzz" aria-hidden="true"><i>z</i><i>Z</i><i>Z</i></span>
+              </button>
+            </div>
+          </div>
+          <div class="note-ctx glass" id="noteCtx" hidden><svg class="ic" style="width:17px;height:17px"><use href="#i-note"/></svg><span>Talking about <b id="noteCtxTitle"></b></span><button class="mini" id="noteCtxX" type="button" aria-label="Stop talking about this note"><svg class="ic" style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+          <div class="slash glass" id="slash" hidden role="listbox"></div>
+          <div class="composer glass">
+            <div class="composer-row">
+              <button class="c-btn" id="attachBtn" type="button" title="Attach a text file" aria-label="Attach a text file"><svg class="ic"><use href="#i-cloud"/></svg></button>
+              <input type="file" id="fileInput" hidden accept=".txt,.md,.csv,.json,.html,.xml,.js,.py,.c,.cpp,.java,text/*">
+              <textarea id="input" rows="1" placeholder="Message your friend…" aria-label="Message" autocomplete="off"></textarea>
+              <button class="c-btn" id="micBtn" type="button" title="Tap to speak, tap again to send to the box" aria-label="Dictate"><svg class="ic"><use href="#i-mic"/></svg></button>
+              <button class="send" id="sendBtn" type="button" aria-label="Send"><svg><use href="#i-send"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PLAY -->
+      <section class="view" id="view-play">
+        <div class="scroll" id="playHome">
+          <h2 class="page-h">Play with <span class="pname">Tiny</span></h2>
+          <p class="page-s">Pick a game. She plays back, trash talks a little, and keeps your score.</p>
+          <div class="score" id="scoreHome" style="margin-bottom:14px"></div>
+          <div class="grid" id="gameGrid"></div>
+        </div>
+        <div class="stage glass" id="stage" hidden></div>
+      </section>
+
+      <!-- NEW TODAY -->
+      <section class="view" id="view-today">
+        <div class="scroll">
+          <h2 class="page-h">New today</h2>
+          <p class="page-s">Fresh things you could create today, picked from what she knows about you.</p>
+          <div class="hero-line glass"><svg class="ic" style="width:30px;height:30px"><use href="#i-spark"/></svg><p id="todayGreet">Loading ideas…</p><button class="btn ghost" id="todayRefresh" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-refresh"/></svg>New set</button></div>
+          <div class="grid" id="ideaGrid"></div>
+        </div>
+      </section>
+
+      <!-- NOTES -->
+      <section class="view" id="view-notes">
+        <div class="scroll" id="notesHome">
+          <h2 class="page-h">Notes</h2>
+          <p class="page-s">Write pages, or save a reply or a whole chat. She can read a note and help you with it, and finds old notes by meaning.</p>
+          <div class="toolbar"><input class="search" id="noteSearch" type="search" placeholder="Search notes"><button class="btn" id="noteNew" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>New note</button></div>
+          <div class="grid" id="noteGrid"></div>
+        </div>
+        <div class="stage glass note-editor" id="noteEd" hidden>
+          <div class="stage-top"><button class="icon-btn" id="nBack" type="button" aria-label="Back to notes"><svg class="ic"><use href="#i-back"/></svg></button><input class="note-title" id="nTitle" placeholder="Untitled" maxlength="160" aria-label="Note title"><span class="save-state" id="nState">Saved</span></div>
+          <div class="seg" id="nMode"><button data-v="edit" class="on">Write</button><button data-v="view">Preview</button></div>
+          <div class="note-warn" id="nWarn" hidden>This note changed somewhere else. <button class="btn ghost" id="nReload" type="button">Load the newer one</button></div>
+          <textarea class="note-body" id="nBody" placeholder="Start writing. Markdown works: # heading, - list, **bold**." aria-label="Note text"></textarea>
+          <div class="md note-view" id="nView" hidden></div>
+          <div class="note-actions"><button class="btn" id="nAsk" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-chat"/></svg><span>Ask <span class="pname">Tiny</span> about this</span></button><button class="btn ghost" id="nPin" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-pin"/></svg><span>Pin</span></button><button class="btn danger" id="nDel" type="button">Delete</button></div>
+        </div>
+      </section>
+
+      <!-- REMINDERS -->
+      <section class="view" id="view-tasks">
+        <div class="scroll">
+          <h2 class="page-h">Reminders and routines</h2>
+          <p class="page-s">Tell her what and when. She does it on time with everything she knows about you, and sends it here and to Telegram.</p>
+          <div class="card glass" style="margin:0 4px 16px">
+            <div class="field"><label for="tText">Just say it</label><div class="gbar"><input class="in" id="tText" placeholder="Every morning at 8, give me a pep talk and my top priority" maxlength="400"><button class="btn" id="tAdd" type="button">Set it</button></div><small>Examples: remind me tomorrow at 6 pm to call mom. Every Sunday evening, help me plan my week.</small></div>
+            <details><summary style="cursor:pointer;font-weight:600;font-size:13.5px;color:var(--body)">Set it up by hand</summary>
+              <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:14px">
+                <div class="field"><label for="tWhat">What should she do?</label><input type="text" id="tWhat" maxlength="600" placeholder="Remind me to drink water"></div>
+                <div class="field"><label for="tWhen">When (India time)</label><input type="datetime-local" id="tWhen"></div>
+                <div class="field"><label for="tRepeat">Repeat</label><select id="tRepeat"><option value="">Once</option><option value="60">Every hour</option><option value="1440">Every day</option><option value="10080">Every week</option></select></div>
+              </div><button class="btn" id="tSave" type="button">Save reminder</button></details>
+          </div>
+          <div id="taskList"></div>
+        </div>
+      </section>
+
+      <!-- MOOD -->
+      <section class="view" id="view-mood">
+        <div class="scroll">
+          <h2 class="page-h">How are you feeling?</h2>
+          <p class="page-s">One tap a day. <span class="pname">Tiny</span> remembers, and checks on you if you had a rough one.</p>
+          <div class="card glass mood-card" style="margin:0 4px 18px">
+            <div class="mood-faces" id="moodFaces" role="radiogroup" aria-label="Your mood today"></div>
+            <textarea id="moodNote" maxlength="400" rows="2" placeholder="Anything you want to add? (optional)" aria-label="Mood note"></textarea>
+            <button class="btn" id="moodSave" type="button" disabled>Save today's mood</button>
+            <div class="mood-reply" id="moodReply" hidden><img id="moodImg" src="/images/stickers/tiny-smile.webp" alt=""><p id="moodText"></p></div>
+          </div>
+          <h3 class="sub-h">Last two weeks</h3>
+          <div class="card glass mood-chart" id="moodChart" style="margin:0 4px 16px"></div>
+          <div id="moodList"></div>
+        </div>
+      </section>
+
+      <!-- PERSONA -->
+      <section class="view" id="view-persona">
+        <div class="scroll">
+          <h2 class="page-h">Act like a girl</h2>
+          <p class="page-s">Choose who you are talking to, how she sounds, and how she speaks. Changes save by themselves.</p>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+            <div class="card glass">
+              <div class="field"><label>Who is she?</label>
+                <div class="seg" id="segGender"><button data-v="girl">Girl (Tiny)</button><button data-v="boy">Boy (Byte)</button></div></div>
+              <div class="field"><label for="pName">Her name</label><input type="text" id="pName" maxlength="30"></div>
+              <div class="field"><label for="uName">What should she call you?</label><input type="text" id="uName" maxlength="60" placeholder="Your name or nickname"></div>
+              <div class="field"><label>Vibe</label>
+                <div class="seg" id="segVibe"><button data-v="cute">Cute</button><button data-v="bestie">Bestie</button><button data-v="sweet">Sweet</button><button data-v="playful">Playful</button><button data-v="caring">Caring sister</button><button data-v="focus">Focus buddy</button></div></div>
+              <div class="field"><label>Language</label>
+                <div class="seg" id="segLang"><button data-v="auto">Match me</button><button data-v="english">English</button><button data-v="hinglish">Hinglish</button><button data-v="hindi">Hindi</button></div></div>
+              <div class="field"><label for="pCustom">Extra instructions</label><textarea id="pCustom" maxlength="1500" placeholder="Example: call me boss, remind me to drink water, be extra honest about my plans"></textarea></div>
+            </div>
+            <div class="card glass">
+              <div class="field"><label>Brain</label>
+                <div class="seg" id="segBrain"><button data-v="smart">Smart</button><button data-v="fast">Fast</button><button data-v="lite">Lite</button></div>
+                <small>Smart thinks deepest. Fast replies quickest. If one is busy, the next model takes over by itself.</small></div>
+              <div class="line-row"><div><b>Ask before she remembers</b><small>New things she learns wait for your OK in the Memory page.</small></div><label class="switch"><input type="checkbox" id="rvMem"><span></span></label></div>
+              <div class="line-row"><div><b>Speak every reply</b><small>Otherwise only voice chat talks. The speaker button works anytime.</small></div><label class="switch"><input type="checkbox" id="vAuto"><span></span></label></div>
+              <div class="line-row"><div><b>Use browser voice only</b><small>Skips the cloud voice. Always used for Hindi.</small></div><label class="switch"><input type="checkbox" id="vBrowser"><span></span></label></div>
+              <div class="field" style="margin-top:14px"><label>Tiny's voice (girl)</label><div class="seg" id="segVGirl"><button data-v="hannah">Hannah</button><button data-v="autumn">Autumn</button><button data-v="diana">Diana</button></div></div>
+              <div class="field"><label>Byte's voice (boy)</label><div class="seg" id="segVBoy"><button data-v="troy">Troy</button><button data-v="austin">Austin</button><button data-v="daniel">Daniel</button></div></div>
+              <div class="field"><label for="vRate">Speaking speed</label><input type="range" class="range" id="vRate" min="0.7" max="1.4" step="0.05"></div>
+              <div class="field"><label for="vPitch">Browser voice pitch</label><input type="range" class="range" id="vPitch" min="0.7" max="1.6" step="0.05"></div>
+              <button class="btn ghost" id="vTest" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-speaker"/></svg>Test her voice</button>
+            </div>
+            <div class="card glass">
+              <div class="field"><label>Phone app and notifications</label><small id="pwaState">Checking…</small></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn" id="pwaInstall" type="button" hidden><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-phone"/></svg>Install the app</button>
+                <button class="btn" id="pushOn" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-bell"/></svg>Turn on notifications</button>
+                <button class="btn ghost" id="pushTest" type="button">Send a test</button>
+              </div>
+              <small style="display:block;margin-top:10px;color:var(--muted)">Reminders, mood check-ins and her messages reach your phone even when the app is closed, because her worker runs on Cloudflare day and night. On iPhone, first use Share, then Add to Home Screen.</small>
+            </div>
+            <div class="card glass">
+              <div class="line-row"><div><b>Texting style</b><small>Her replies come as a few short bubbles with typing dots, like a real chat.</small></div><label class="switch"><input type="checkbox" id="chBubbles"><span></span></label></div>
+              <div class="line-row"><div><b>Hands-free: say "Hey <span class="pname">Tiny</span>"</b><small>Keeps listening while this page is open and starts voice chat when you call her.</small></div><label class="switch"><input type="checkbox" id="hfOn"><span></span></label></div>
+              <div class="line-row"><div><b>Daily mood check-in</b><small>She asks how you feel, once a day.</small></div><label class="switch"><input type="checkbox" id="moodOn"><span></span></label></div>
+              <div class="field"><label for="moodHour">Check-in time (India)</label><select id="moodHour"></select></div>
+              <div class="line-row"><div><b>"Are you forgetting me?"</b><small>If you do not write for a while, she sends a sad little message.</small></div><label class="switch"><input type="checkbox" id="missOn"><span></span></label></div>
+              <div class="field"><label for="missDays">After</label><select id="missDays"><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="5">5 days</option><option value="7">7 days</option></select></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="careMood" type="button">Try the mood check-in now</button><button class="btn ghost" id="careMiss" type="button">Try the "I miss you" now</button></div>
+              <small id="hiState" style="display:block;margin-top:12px;color:var(--muted)"></small>
+            </div>
+            <div class="card glass">
+              <div class="field"><label>Telegram</label><small id="tgState">Checking…</small></div>
+              <button class="btn" id="tgConnect" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-tg"/></svg>Connect the bot</button>
+              <small style="display:block;margin-top:10px;color:var(--muted)">Same memory on the website and in Telegram. Voice notes work both ways.</small>
+              <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+              <div class="field"><label>Your data</label><small>A text backup is kept every week. Nothing here stores PDFs or images.</small></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="bkNow" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-cloud"/></svg>Back up now</button><button class="btn ghost" id="bkExport" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-down"/></svg>Download all</button></div>
+              <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+              <button class="btn danger" id="logout" type="button">Log out on this device</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MEMORY -->
+      <section class="view" id="view-memory">
+        <div class="scroll">
+          <h2 class="page-h">Memory</h2>
+          <p class="page-s">Everything she remembers about you. Pin what matters, edit it, or forget it.</p>
+          <div class="toolbar"><input class="search" id="memSearch" type="search" placeholder="Search memories"><button class="btn" id="memAddBtn" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>Add</button><button class="btn danger" id="memClear" type="button">Forget all</button></div>
+          <div id="pendBox" hidden style="margin:0 4px 18px"><div class="pend-h"><b id="pendTitle">Waiting for your OK</b><button class="btn ghost" id="pendAll" type="button">Remember all</button></div><div id="pendList"></div></div>
+          <div class="card glass" id="memAdd" hidden style="margin:0 4px 16px"><div class="field"><label for="memNew">Tell her something to remember</label><textarea id="memNew" maxlength="400" placeholder="Example: My exam is on 20 November"></textarea></div><button class="btn" id="memSave" type="button">Save memory</button></div>
+          <div id="memList"></div>
+        </div>
+      </section>
+
+      <!-- HISTORY -->
+      <section class="view" id="view-history">
+        <div class="scroll">
+          <h2 class="page-h">History</h2>
+          <p class="page-s">Every chat from the website and Telegram, saved forever.</p>
+          <div class="toolbar"><input class="search" id="histSearch" type="search" placeholder="Search all chats"></div>
+          <div id="histList"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- VOICE CHAT -->
+<div class="voice-ov" id="voiceOv" role="dialog" aria-modal="true" aria-label="Voice chat">
+  <div class="v-char"><img id="vImg" src="/images/stickers/tiny-smile.webp" alt=""></div>
+  <div class="v-timer" id="vTimer" aria-label="Call time">0:00</div>
+  <div class="v-state" id="vState">Tap the orb and talk</div>
+  <div class="v-you" id="vYou"></div>
+  <div class="v-text" id="vText"></div>
+  <button class="orb" id="orb" type="button" aria-label="Start or stop talking"><svg><use href="#i-mic-w"/></svg></button>
+  <div class="v-actions"><button class="btn ghost" id="vMute" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-micoff"/></svg><span>Mute</span></button><button class="btn ghost" id="vClose" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-x"/></svg>Close</button></div>
+</div>
+
+<!-- LOGIN -->
+<div class="login" id="login" hidden>
+  <form class="card glass" id="loginForm">
+    <img src="/images/stickers/tiny-hello.webp" alt="">
+    <h2>Hi, it’s me</h2>
+    <p>This is your private space. Enter your key to come in.</p>
+    <div class="field" style="text-align:left"><input type="password" id="loginKey" placeholder="Your access key" autocomplete="current-password" aria-label="Access key"></div>
+    <button class="btn" style="width:100%" type="submit">Come in</button>
+    <p class="err" id="loginErr" role="alert"></p>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="/js/app.js"></script>
+<script src="/js/voice.js"></script>
+<script src="/js/views.js"></script>
+<script src="/js/extras.js"></script>
+<script src="/js/play.js"></script>
+<script src="/js/mood.js"></script>
+<script src="/js/care.js"></script>
+<script src="/js/handsfree.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});</script>
+</body>
+</html>

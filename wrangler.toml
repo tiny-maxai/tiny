@@ -1,0 +1,55 @@
+name = "memory-ai"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+# The website (public/) is served by the same Worker. Only /api/* runs your code first.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+not_found_handling = "404-page"
+
+# Workers AI: embeddings (memory search), speech to text fallback, text to speech.
+[ai]
+binding = "AI"
+
+# D1: chats, messages, memories, game scores.
+[[d1_databases]]
+binding = "DB"
+database_name = "memory-ai-db"
+database_id = "PASTE_D1_ID_HERE"
+
+# KV: settings, today's ideas, weekly backups. (No R2: it needs a card, so nothing here stores files.)
+[[kv_namespaces]]
+binding = "KV"
+id = "PASTE_KV_ID_HERE"
+
+# Vectorize: finds old memories and chats by meaning (1024 dimensions, cosine).
+[[vectorize]]
+binding = "VECTORS"
+index_name = "memory-ai-index"
+
+# Every minute: reminders (on the minute), mood check-in and "I miss you" checks. 06:00 IST every day = new "New Today" ideas. Sunday 02:30 IST = weekly text backup in KV.
+[triggers]
+crons = ["* * * * *", "30 0 * * *", "0 21 * * 6"]
+
+[vars]
+# Models are plain text, so you can change them without touching code.
+GROQ_MODELS_SMART = "openai/gpt-oss-120b,llama-3.3-70b-versatile"
+GROQ_MODELS_FAST = "llama-3.3-70b-versatile,openai/gpt-oss-20b"
+GROQ_MODELS_LITE = "llama-3.1-8b-instant,openai/gpt-oss-20b"
+# Used when every Groq model is busy or out of quota. Check openrouter.ai/models?max_price=0 for current free ids.
+OPENROUTER_MODELS = "meta-llama/llama-3.3-70b-instruct:free,openai/gpt-oss-120b:free"
+
+# Voices. Groq Orpheus is tried first (cute and natural), then Cloudflare Aura, then Melo, then your browser.
+# Orpheus needs a one-time "accept terms" click in the Groq console (console.groq.com/playground?model=canopylabs%2Forpheus-v1-english).
+TTS_GROQ_MODEL = "canopylabs/orpheus-v1-english"
+TTS_AURA_GIRL = "luna"
+TTS_AURA_BOY = "orion"
+
+# Hindi voices (optional). Add secrets SARVAM_API_KEY and/or GEMINI_API_KEY to turn them on. Change the names here if you like.
+SARVAM_GIRL = "priya"
+SARVAM_BOY = "aditya"
+GEMINI_GIRL = "Kore"
+GEMINI_BOY = "Puck"
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
