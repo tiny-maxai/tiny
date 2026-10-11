@@ -7,6 +7,9 @@ import { buildSystem } from './persona.js';
 import { complete } from './ai.js';
 import { getNote } from './notes.js';
 import { moodContext } from './moods.js';
+import { periodNow } from './period.js';
+import { assist } from './assist.js';
+import { tinyMoodNow } from './tinymood.js';
 
 export async function ensureConversation(env, convId, source, firstText) {
   if (convId) {
@@ -21,16 +24,23 @@ export async function ensureConversation(env, convId, source, firstText) {
 }
 
 export async function prepareChat(env, { convId, text, source = 'web', via = 'text', spoken = false, noteId = null, task = false }) {
-  const settings = await getSettings(env);
-  const id = await ensureConversation(env, convId, source, text);
+  // Everything that does not depend on the new message loads at the same time, so the first word comes sooner.
+  const [settings, id, mem, note, moods, helped, last] = await Promise.all([
+    getSettings(env),
+    ensureConversation(env, convId, source, text),
+    recall(env, text),
+    noteId ? getNote(env, noteId).catch(() => null) : null,
+    task ? [] : moodContext(env),
+    assist(env, text, { source, task, convId }),
+    task ? 0 : env.DB.prepare("SELECT MAX(created_at) AS t FROM messages WHERE role='user' AND conv_id<>'routines'").first().then((r) => (r && r.t) || 0).catch(() => 0),
+  ]);
+  if (helped.notes && helped.notes.notes.length) { const seen = new Set((mem.notes || []).map((n) => n.title)); mem.notes = [...helped.notes.notes.filter((n) => !seen.has(n.title)), ...(mem.notes || [])].slice(0, 4); }
   const ins = await env.DB.prepare('INSERT INTO messages (conv_id,role,content,via,created_at) VALUES (?,?,?,?,?)').bind(id, 'user', text, via, now()).run();
   const userMsgId = ins.meta && ins.meta.last_row_id;
-  const hist = await env.DB.prepare('SELECT role,content FROM messages WHERE conv_id=? ORDER BY id DESC LIMIT 30').bind(id).all();
-  const history = (hist.results || []).reverse().map((m) => ({ role: m.role, content: clip(m.content, 6000) }));
-  const mem = await recall(env, text);
-  const note = noteId ? await getNote(env, noteId).catch(() => null) : null;
-  const moods = task ? [] : await moodContext(env);
-  const system = buildSystem({ settings, mem, spoken, source, note, task, moods });
+  const hist = await env.DB.prepare('SELECT role,content FROM messages WHERE conv_id=? ORDER BY id DESC LIMIT 20').bind(id).all();
+  const history = (hist.results || []).reverse().map((m) => ({ role: m.role, content: clip(m.content, m.role === 'user' && m.content.startsWith('[File: ') ? 17000 : 3000) }));
+  const period = periodNow(settings);
+  const system = buildSystem({ settings, mem, spoken, source, note, task, moods, period, done: helped.done, web: helped.web, notes: helped.notes, moodKind: task ? null : tinyMoodNow(settings, { lastActive: last }) });
   return { convId: id, userMsgId, settings, messages: [{ role: 'system', content: system }, ...history] };
 }
 

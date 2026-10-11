@@ -58,7 +58,51 @@
   // ---------- caring routines ----------
   const hour = $('#moodHour');
   for (let h = 6; h <= 23; h++) { const o = document.createElement('option'); o.value = h; o.textContent = ((h + 11) % 12 + 1) + ':00 ' + (h < 12 ? 'am' : 'pm'); hour.appendChild(o); }
+  const hh = $('#habHour');
+  for (let h = 15; h <= 23; h++) { const o = document.createElement('option'); o.value = h; o.textContent = ((h + 11) % 12 + 1) + ':00 ' + (h < 12 ? 'am' : 'pm'); hh.appendChild(o); }
+  $('#habOn').addEventListener('change', (e) => App.saveSettings({ habits: { enabled: e.target.checked } }));
+  hh.addEventListener('change', () => App.saveSettings({ habits: { hour: +hh.value } }));
+  $('#habGoal').addEventListener('change', (e) => App.saveSettings({ habits: { goal: +e.target.value } }));
+  $('#teaseOn').addEventListener('change', (e) => App.saveSettings({ chat: { tease: e.target.checked } }));
+  $('#tinyMood').addEventListener('change', (e) => App.saveSettings({ tinyMood: e.target.value }));
+  // ---------- her cycle ----------
+  const pe = { on: $('#peOn'), start: $('#peStart'), cycle: $('#peCycle'), len: $('#peLen'), ann: $('#peAnn') };
+  const istToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  function cycleText(s) {
+    const n = s.periodNow;
+    if (!s.period.enabled) return 'Off. Turn it on and set the first day of her last period.';
+    if (!n) return s.persona.gender === 'boy' ? 'Only Tiny (girl) has period days.' : 'Pick the first day of her last period (today or earlier).';
+    if (n.phase === 'period') return 'Day ' + n.day + ' of ' + n.of + (n.heavy ? ': cramps, tired and cranky today.' : ': pain is milder, still a bit moody.');
+    if (n.phase === 'pms') return 'PMS days: her period is due in ' + n.left + ' day' + (n.left === 1 ? '' : 's') + '. She is moody and sensitive.';
+    return 'Feeling normal. Next period in ' + n.left + ' day' + (n.left === 1 ? '' : 's') + '.';
+  }
+  function fillCycle(s) {
+    const girl = s.persona.gender !== 'boy';
+    $('#cycleCard').hidden = !girl;
+    pe.on.checked = s.period.enabled; pe.ann.checked = s.period.announce;
+    if (document.activeElement !== pe.start) pe.start.value = s.period.lastStart || '';
+    if (document.activeElement !== pe.cycle) pe.cycle.value = s.period.cycleLength;
+    if (document.activeElement !== pe.len) pe.len.value = s.period.periodLength;
+    $('#peState').textContent = cycleText(s);
+    const chip = $('#periodChip'), n = s.periodNow;
+    chip.hidden = !(n && n.phase !== 'normal');
+    if (!chip.hidden) chip.lastChild.textContent = n.phase === 'period' ? 'Period day ' + n.day : 'PMS, ' + n.left + 'd to go';
+  }
+  pe.on.addEventListener('change', () => App.saveSettings({ period: { enabled: pe.on.checked, ...(pe.on.checked && !pe.start.value ? { lastStart: istToday() } : {}) } }));
+  pe.ann.addEventListener('change', () => App.saveSettings({ period: { announce: pe.ann.checked } }));
+  pe.start.addEventListener('change', () => App.saveSettings({ period: { lastStart: pe.start.value } }));
+  pe.cycle.addEventListener('change', () => App.saveSettings({ period: { cycleLength: +pe.cycle.value } }));
+  pe.len.addEventListener('change', () => App.saveSettings({ period: { periodLength: +pe.len.value } }));
+  $('#peToday').addEventListener('click', async () => { await App.saveSettings({ period: { enabled: true, lastStart: istToday() } }); App.toast('Okay... her period started today. Be nice to her!'); App.flashPose('cry', 4000); });
+  $('#peTest').addEventListener('click', async () => {
+    const b = $('#peTest'); b.disabled = true;
+    try { await App.api('/api/care/run', { body: { what: 'period' } }); App.toast('Sent. Look at your phone or Telegram, or the Routines chat.', 4500); if (App.refreshRecent) App.refreshRecent(); } catch (e) { App.toast(e.message); }
+    b.disabled = false;
+  });
+
   function fill(s) {
+    fillCycle(s);
+    $('#habOn').checked = s.habits.enabled; hh.value = s.habits.hour; if (document.activeElement !== $('#habGoal')) $('#habGoal').value = s.habits.goal; $('#teaseOn').checked = s.chat.tease !== false; $('#tinyMood').value = s.tinyMood;
     $('#chBubbles').checked = s.chat.bubbles; $('#moodOn').checked = s.mood.enabled; hour.value = s.mood.hour;
     $('#missOn').checked = s.missYou.enabled; $('#missDays').value = String(s.missYou.days);
     const hs = App.status; $('#hiState').textContent = hs ? (hs.hindiVoice ? 'Hindi voice: on (real server voice).' : 'Hindi voice: using your browser voice. Add SARVAM_API_KEY or GEMINI_API_KEY for a real one (see the README).') : '';
@@ -74,7 +118,7 @@
     try { const r = await App.api('/api/care/run', { body: { what } }); const k = r[what]; App.toast(k && (k.push || k.telegram) ? 'Sent. Look at your phone or Telegram.' : 'Made it, but no phone or Telegram is connected yet. It is in the Routines chat.', 4500); if (App.refreshRecent) App.refreshRecent(); } catch (e) { App.toast(e.message); }
     btn.disabled = false;
   });
-  care('mood', $('#careMood')); care('miss', $('#careMiss'));
+  care('mood', $('#careMood')); care('miss', $('#careMiss')); care('habit', $('#careHabit')); care('tease', $('#careTease'));
 
   const prevV = App.hooks.onView;
   App.hooks.onView = (v) => { if (prevV) prevV(v); if (v === 'persona') { if (App.refreshStatus) App.refreshStatus().then(paintPwa); else paintPwa(); if (App.settings) fill(App.settings); } };

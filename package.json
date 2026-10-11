@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "schema": "node scripts/gen-schema.mjs",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute memory-ai-db --remote --file=schema.sql",
     "db:init:local": "wrangler d1 execute memory-ai-db --local --file=schema.sql",

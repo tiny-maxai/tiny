@@ -27,20 +27,20 @@ function request(env, c, opts) {
   const key = c.provider === 'groq' ? env.GROQ_API_KEY : env.OPENROUTER_API_KEY;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
   if (c.provider === 'openrouter') { headers['X-Title'] = 'Memory AI'; headers['HTTP-Referer'] = 'https://memory-ai.workers.dev'; }
-  return fetch(url, { method: 'POST', headers, body: JSON.stringify(body(c, opts)) });
+  return fetch(url, { method: 'POST', headers, body: JSON.stringify(body(c, opts)), signal: AbortSignal.timeout(opts.timeout || (opts.stream ? 15000 : 25000)) });
 }
 
 function noModel() {
   return Object.assign(new Error('No AI key is set. Add GROQ_API_KEY (and optionally OPENROUTER_API_KEY) as Worker secrets.'), { status: 503 });
 }
 
-export async function complete(env, { brain, messages, temperature = 0.6, maxTokens = 700, json = false }) {
+export async function complete(env, { brain, messages, temperature = 0.6, maxTokens = 700, json = false, timeout }) {
   const cs = candidates(env, brain);
   if (!cs.length) throw noModel();
   const errors = [];
   for (const c of cs) {
     try {
-      const res = await request(env, c, { messages, temperature, maxTokens, json });
+      const res = await request(env, c, { messages, temperature, maxTokens, json, timeout });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { errors.push(`${c.id}: ${data?.error?.message || res.status}`); continue; }
       const text = data?.choices?.[0]?.message?.content?.trim();

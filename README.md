@@ -94,3 +94,35 @@ Notes (its Spaces and pages), reminders (its scheduled tasks), approve-before-sa
 
 ## Updating an existing deployment
 Run `npm run db:init` (adds the notes, tasks and moods tables), then `npm run deploy`. The crons are updated automatically (every minute, daily ideas, weekly backup: 3 of the 5 free triggers). If you use Telegram, press **Connect the bot** again so the mood buttons work.
+
+## What changed in the latest update
+- **Look**: flat single colour (#573AFC) in the Thunder Clay style from design.html. No gradients, no footer, no dark mode.
+- **Speed**: no more embedding call on every message when Vectorize is not set up, fast model first, shorter history, lighter page effects, and each section loads only when you open it (you see "Loading ..." first). Replies also appear bubble by bubble as they arrive. Tip: create the D1 database in an Asia region (`wrangler d1 create memory-ai-db --location apac`) so Indore is close to it.
+- **Games**: she keeps the secret in 20 Questions, checks Word Chain words, never repeats the same trivia question, and waits for your answer.
+- **Period days**: Act like a girl > Period days. Set the first day of her last period; on those days she has cramps, is tired, irritated, craving food and moody, and a few days before she gets PMS. Optional messages when it starts.
+- **HTML files on Telegram**: send `/html a pomodoro timer page` (or just say "make an html page for ...") and she builds one self-contained .html file and sends it to you as a document. No new setup: it uses the same bot. Press **Connect the bot** once after updating so the new command shows.
+
+## Update 3: more things she can do
+- **Chat does things now**: say "remind me tomorrow at 6 pm to call mom", "note this", or "Riya's birthday is 14 March" and she really sets the reminder, saves the note or remembers the date, then tells you.
+- **Notes**: she reads your notes on the first ask, no need to say "read it".
+- **Evening check (8 pm, Telegram)**: how many glasses of water, then your mood, with buttons. Streak and 14-day chart are in Mood. Change time and goal in Act like a girl. Telegram: `/water 6`.
+- **Birthdays and dates**: Reminders page, `/dates` on Telegram, or just tell her. She reminds you 7 days and 1 day before and on the day, with a wish ready to copy.
+- **Links and web search**: send a link, or ask "search ...", "news about ...". Telegram: `/search ...`. Uses DuckDuckGo with a Wikipedia fallback, no key.
+- **Translate**: `/tr text` gives Hindi <-> English, a Roman version and the tone.
+- **Files on Telegram**: `/html`, `/pdf`, `/csv`, `/md` (or just ask). Asking on the website sends the file to your Telegram. PDFs are plain text in English or Hinglish (no Devanagari).
+- **Her moods**: sleepy, hyper, sulky (if you vanish for 40 hours) and sassy, changing by itself or set in Act like a girl. She also texts first sometimes to tease you.
+
+Update: run `npm run db:init` (adds habits and dates tables), then `npm run deploy`, then press **Connect the bot** once.
+
+## Deploying from the Cloudflare dashboard (one command only)
+No terminal step is needed any more. The Worker creates its own database tables the first time it runs.
+- **Build command**: leave empty (or `npm install`)
+- **Deploy command**: `npx wrangler deploy`
+Then add your secrets under Settings > Variables and Secrets (GROQ_API_KEY, ACCESS_KEY, TELEGRAM_BOT_TOKEN and so on), and press **Connect the bot** once in the app.
+Telegram tip: swipe-reply to any message (hers or yours) and she answers about that message. Reply with `/tr` to translate it, or `/pdf` to turn it into a file.
+
+## Reading files
+Send her a PDF, HTML or text file (txt, md, csv, json, code) on Telegram, with or without a caption, and she reads it and answers. On the website use the paperclip button. Follow-up questions work in the same chat. PDFs use Cloudflare Workers AI to read the text (needs the [ai] binding already in wrangler.toml), with a built-in reader as backup. Scanned PDFs that are only pictures cannot be read.
+
+## Reading pictures (OCR)
+Send a photo or screenshot on Telegram (or use the paperclip on the website) and she reads the text in it (English and Hindi, handwriting as best she can), solves a question paper photo, or describes the picture. It uses Groq's free vision model with your existing GROQ_API_KEY (change the model in `GROQ_MODELS_VISION` if Groq renames it), with Workers AI as backup. Pictures are read and thrown away, never stored. Limit about 4 MB per picture. For best Telegram results send a photo normally, or as a file for sharper text.

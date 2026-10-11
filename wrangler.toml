@@ -30,8 +30,9 @@ crons = ["* * * * *", "30 0 * * *", "0 21 * * 6"]
 
 [vars]
 # Models are plain text, so you can change them without touching code.
-GROQ_MODELS_SMART = "openai/gpt-oss-120b,llama-3.3-70b-versatile"
+GROQ_MODELS_SMART = "llama-3.3-70b-versatile,openai/gpt-oss-120b"
 GROQ_MODELS_FAST = "llama-3.3-70b-versatile,openai/gpt-oss-20b"
+GROQ_MODELS_VISION = "meta-llama/llama-4-scout-17b-16e-instruct"
 GROQ_MODELS_LITE = "llama-3.1-8b-instant,openai/gpt-oss-20b"
 # Used when every Groq model is busy or out of quota. Check openrouter.ai/models?max_price=0 for current free ids.
 OPENROUTER_MODELS = "meta-llama/llama-3.3-70b-instruct:free,openai/gpt-oss-120b:free"

@@ -75,6 +75,8 @@
     $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
     $('#topTitle').textContent = TITLES[v][0]; $('#topSub').textContent = TITLES[v][1];
     $('#app').classList.remove('nav-open');
+    const L = { today: ['#ideaGrid', 'ideas'], memory: ['#memList', 'memories'], history: ['#histList', 'chats'], notes: ['#noteGrid', 'notes'], tasks: ['#taskList', 'reminders'], mood: ['#moodList', 'moods'] }[v];
+    if (L) { const el = $(L[0]); if (el && !el.children.length) el.innerHTML = `<div class="loading"><i></i>Loading ${L[1]}…</div>`; }
     if (App.hooks.onView) App.hooks.onView(v);
   };
   $('#nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) App.showView(b.dataset.view); });
@@ -169,14 +171,19 @@
     $('#factText').textContent = idea ? idea.title + '. ' + idea.why : f;
     $('#factHead').textContent = idea ? 'Idea for today' : 'Say hi';
   }
+  let ideaAsked = false;
+  const ensureIdea = () => { if (ideaAsked) return; ideaAsked = true; App.api('/api/today').then((t) => App.setIdea(t.ideas)).catch(() => App.setIdea(null)); };
+  App.ensureIdea = ensureIdea;
   App.setIdea = (list) => { idea = list && list.length ? list[Math.floor(Math.random() * list.length)] : null; paintIdea(); };
-  function askIdea() {
+  async function askIdea() {
+    if (!idea) { ensureIdea(); await new Promise((r) => setTimeout(r, 900)); }
     stickerOpen = false; stickerWrap.classList.remove('show');
     App.showView('chat');
     App.send(idea ? `Let's work on this today: ${idea.title}. ${idea.why} Help me get started.` : 'Hi! What should we do today?');
   }
+  ['mouseenter', 'touchstart', 'focusin'].forEach((ev) => stickerWrap.addEventListener(ev, ensureIdea, { once: true, passive: true }));
   stickerBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+    e.stopPropagation(); ensureIdea();
     if (canHover) { askIdea(); return; }
     stickerOpen = !stickerOpen; stickerWrap.classList.toggle('show', stickerOpen);
     if (!App.busy && !poseHold) showPose(restPose());
@@ -206,6 +213,7 @@
     return b;
   }
   function addTyping() {
+    if ($('#typingRow')) return;
     const row = document.createElement('div'); row.className = 'row bot'; row.id = 'typingRow';
     row.innerHTML = botFace() + '<div class="bubble typing"><i></i><i></i><i></i></div>';
     messagesEl.appendChild(row); toBottom();
@@ -245,24 +253,7 @@
     } catch (e) { App.toast(e.message); }
   };
 
-  // Texting style: a reply with blank lines between thoughts shows up as separate bubbles with typing dots in between.
-  function splitBubbles(text) {
-    const t = text.trim();
-    if (!t || t.length > 900 || /```/.test(t) || (t.match(/^\s*(?:[-*]|\d+[.)])\s/mg) || []).length >= 2 || /^#{1,4}\s/m.test(t)) return [t];
-    let parts = t.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
-    if (parts.length > 4) parts = [...parts.slice(0, 3), parts.slice(3).join('\n\n')];
-    return parts.length ? parts : [t];
-  }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  async function revealBubbles(full, signal) {
-    const parts = splitBubbles(full); let last = null;
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0 && !signal.aborted) { addTyping(); await wait(Math.min(1700, 450 + parts[i].length * 16)); rmTyping(); }
-      last = addRow('bot', parts[i]);
-      if (i > 0) last.parentElement.classList.add('cont');
-    }
-    return last;
-  }
 
   let currentAbort = null;
   function setMode(streaming) { sendBtn.innerHTML = streaming ? STOP : SEND; sendBtn.setAttribute('aria-label', streaming ? 'Stop' : 'Send'); }
@@ -281,6 +272,20 @@
     addTyping();
     const controller = new AbortController(); currentAbort = controller;
     const bubbly = !!(App.settings.chat && App.settings.chat.bubbles) && opts.via !== 'voice';
+    let queued = 0, lastBubble = null, live = false, finished = false, pump = Promise.resolve();
+    // Texting style, shown while she writes: each finished paragraph appears as its own bubble right away (no waiting for the whole reply).
+    const enqueue = (txt, idx) => { pump = pump.then(async () => {
+      if (controller.signal.aborted) return;
+      if (idx > 0) { addTyping(); await wait(Math.min(900, 300 + txt.length * 10)); }
+      rmTyping(); lastBubble = addRow('bot', txt); if (idx > 0) lastBubble.parentElement.classList.add('cont');
+      if (!finished) addTyping();
+    }); };
+    const feed = (final) => {
+      if (!bubbly || live) return;
+      if (/```/.test(full) || (full.match(/^\s*(?:[-*]|\d+[.)])\s/mg) || []).length >= 2 || /^#{1,4}\s/m.test(full) || (queued === 0 && !full.includes('\n\n') && full.length > 420)) { live = true; rmTyping(); bubble = lastBubble = addRow('bot', ''); bubble._md.innerHTML = App.md(full); return; }
+      const parts = full.split(/\n{2,}/), ready = final ? parts : parts.slice(0, -1);
+      while (queued < ready.length) { const t = ready[queued].trim(); if (t) enqueue(t, queued); queued++; }
+    };
     const startedAt = Date.now();
     let bubble = null, full = '', raf = 0;
     const paint = () => { raf = 0; if (!bubble) return; const st = nearBottom(); bubble._md.innerHTML = App.md(full); if (st) toBottom(); };
@@ -294,14 +299,19 @@
       const handle = (line) => {
         if (!line.trim()) return; let ev; try { ev = JSON.parse(line); } catch { return; }
         if (ev.type === 'meta') { if (ev.convId && !App.convId) { App.convId = ev.convId; } }
-        else if (ev.type === 'delta') { full += ev.text; if (!bubble && !bubbly) { rmTyping(); bubble = addRow('bot', ''); } if (opts.onText) opts.onText(full); if (!bubbly && !raf) raf = requestAnimationFrame(paint); }
+        else if (ev.type === 'delta') { full += ev.text; if (!bubble && !bubbly) { rmTyping(); bubble = addRow('bot', ''); } if (opts.onText) opts.onText(full); if (!bubbly && !raf) raf = requestAnimationFrame(paint); else if (bubbly) { if (live) { const st = nearBottom(); bubble._md.innerHTML = App.md(full); if (st) toBottom(); } else feed(false); } }
         else if (ev.type === 'error') throw new Error(ev.error);
       };
       for (;;) { const { done, value } = await reader.read(); if (done) break; buf += dec.decode(value, { stream: true }); let n; while ((n = buf.indexOf('\n')) >= 0) { handle(buf.slice(0, n)); buf = buf.slice(n + 1); } }
       if (buf) handle(buf);
       cancelAnimationFrame(raf); rmTyping();
-      if (bubbly) bubble = await revealBubbles(full, controller.signal);
-      else { if (!bubble) bubble = addRow('bot', ''); bubble._md.innerHTML = App.md(full); }
+      if (bubbly) {
+        finished = true;
+        if (live) bubble._md.innerHTML = App.md(full); else feed(true);
+        await pump; rmTyping();
+        if (!lastBubble) lastBubble = addRow('bot', full);
+        bubble = lastBubble;
+      } else { if (!bubble) bubble = addRow('bot', ''); bubble._md.innerHTML = App.md(full); }
       addActions(bubble, full); toBottom();
       reply = full;
       App.flashPose(answerPose(text, full), 3800);
@@ -310,7 +320,7 @@
       if ((App.settings.voice.autoplay || opts.speak) && !opts.silent) App.speak(full);
     } catch (e) {
       cancelAnimationFrame(raf); rmTyping();
-      if (bubbly && !bubble && full.trim()) bubble = addRow('bot', full);
+      if (bubbly && !lastBubble && full.trim()) bubble = addRow('bot', full);
       if (e.name === 'AbortError') {
         if (bubble && full.trim()) { bubble._md.innerHTML = App.md(full); addActions(bubble, full); reply = full; }
       } else {
@@ -330,20 +340,27 @@
 
   // File attach: puts the text of the file into the box (no size limit besides the browser's).
   $('#attachBtn').addEventListener('click', () => $('#fileInput').click());
-  $('#fileInput').addEventListener('change', (e) => {
+  $('#fileInput').addEventListener('change', async (e) => {
     const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
     App.flashPose('type', 2500);
-    const r = new FileReader();
-    r.onerror = () => App.toast('Could not read that file');
-    r.onload = () => { const t = String(r.result || ''); if (t.includes('\u0000')) { App.toast('Only text files can be attached'); return; } input.value = (input.value.trim() ? input.value.trim() + '\n\n' : '') + '[' + f.name + ']\n' + t; grow(); input.focus(); };
-    r.readAsText(f);
+    const put = (name, t) => { input.value = (input.value.trim() ? input.value.trim() + '\n\n' : '') + '[File: ' + name + ']\n' + t + '\n[End of file]\n\n'; grow(); input.focus(); };
+    try {
+      if (/\.(pdf|html?|jpe?g|png|webp|gif)$/i.test(f.name) || /^(application\/pdf|image\/)/.test(f.type)) {
+        App.toast('Reading ' + f.name + '…', 6000);
+        const res = await App.api('/api/extract?name=' + encodeURIComponent(f.name), { body: await f.arrayBuffer(), headers: { 'Content-Type': f.type || 'application/octet-stream' } });
+        put(f.name, res.text.length > 16000 ? res.text.slice(0, 16000) + '\n…(the rest is cut off)' : res.text);
+      } else {
+        const t = await f.text(); if (t.includes('\u0000')) { App.toast('I can read pictures, PDF, HTML and text files'); return; }
+        put(f.name, t);
+      }
+    } catch (err) { App.toast(err.message || 'Could not read that file', 4500); }
   });
 
   // ---------- recent chats, status, memory toast ----------
   function highlightRecent() { $$('#recent button').forEach((b) => b.classList.toggle('on', b.dataset.id === App.convId)); }
   async function refreshRecent() {
     try {
-      const d = await App.api('/api/conversations');
+      const d = await App.api('/api/conversations?limit=14');
       App.conversations = d.conversations;
       const box = $('#recent'); box.innerHTML = '';
       d.conversations.slice(0, 14).forEach((c) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.id = c.id; b.title = c.title; b.textContent = (c.source === 'telegram' ? '✈ ' : '') + c.title; b.addEventListener('click', () => App.loadConversation(c.id)); box.appendChild(b); });
@@ -396,8 +413,9 @@
       App.applySettings(s);
       curPose = sleepMode() ? 'sleep' : 'smile'; stickerBtn.dataset.pose = curPose; stickerImg.src = stk(curPose); stkBob.classList.toggle('asleep', curPose === 'sleep');
       welcome();
-      refreshRecent(); refreshStatus(); if (App.refreshPending) App.refreshPending(false);
-      App.api('/api/today').then((t) => App.setIdea(t.ideas)).catch(() => App.setIdea(null));
+      // Only what the first screen needs is loaded now. Recent chats, counts and ideas load a moment later, and every other section loads when you open it.
+      setTimeout(() => { refreshRecent(); refreshStatus(); }, 250);
+      setTimeout(() => { if (App.refreshPending) App.refreshPending(false); }, 1800);
       if (!sleepMode()) setTimeout(() => App.flashPose('wave', 3500), 600);
       if (App.hooks.onBoot) App.hooks.onBoot();
       const go = new URLSearchParams(location.search).get('go');

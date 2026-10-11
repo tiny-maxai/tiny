@@ -45,6 +45,21 @@
     const b = e.target.closest('button[data-id]'); if (!b) return;
     try { await App.api('/api/moods/' + b.dataset.id, { method: 'DELETE' }); await load(); } catch (err) { App.toast(err.message); }
   });
+  // ---- water ----
+  let hab = null;
+  function paintWater() {
+    if (!hab) return;
+    $('#waterNow').textContent = hab.today + (hab.today === 1 ? ' glass' : ' glasses') + (hab.today >= hab.goal ? ', goal done' : '');
+    $('#waterSub').textContent = 'Goal ' + hab.goal + ' glasses a day. Streak: ' + hab.streak + (hab.streak === 1 ? ' day.' : ' days.');
+    const by = {}; hab.rows.forEach((r) => { by[r.day] = r.water; });
+    const days = []; for (let i = 13; i >= 0; i--) days.push(new Date(Date.now() + 330 * 60000 - i * 86400000).toISOString().slice(0, 10));
+    const top = Math.max(hab.goal, ...days.map((d) => by[d] || 0));
+    $('#waterChart').innerHTML = '<div class="bars">' + days.map((d) => { const w = by[d] || 0; return `<div class="bar-col" title="${esc(dayName(d))}: ${w}"><div class="bar${w >= hab.goal ? ' s5' : w ? ' s3' : ''}" style="height:${Math.round(w / top * 78) + 6}px"></div><span>${d.slice(8)}</span></div>`; }).join('') + '</div>';
+  }
+  async function loadWater() { try { hab = await App.api('/api/habits'); paintWater(); } catch { /* ignore */ } }
+  async function water(body) { try { hab = await App.api('/api/habits', { body }); paintWater(); } catch (e) { App.toast(e.message); } }
+  $('#waterPlus').addEventListener('click', () => water({ add: 1 }));
+  $('#waterMinus').addEventListener('click', () => water({ add: -1 }));
   const prev = App.hooks.onView;
-  App.hooks.onView = (v) => { if (prev) prev(v); if (v === 'mood') { load(); $('#moodReply').hidden = true; } };
+  App.hooks.onView = (v) => { if (prev) prev(v); if (v === 'mood') { load(); loadWater(); $('#moodReply').hidden = true; } };
 })();

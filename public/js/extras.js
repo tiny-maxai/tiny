@@ -130,6 +130,26 @@
     try { await App.api('/api/tasks', { body: { prompt: what, runAt: Date.parse(w + ':00+05:30'), intervalMinutes: $('#tRepeat').value || null } }); $('#tWhat').value = ''; App.toast('Saved'); loadTasks(); } catch (e) { App.toast(e.message); }
   });
 
+  // ================= Birthdays and special days =================
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  async function loadDates() {
+    const box = $('#dateList');
+    try {
+      const d = await App.api('/api/dates');
+      box.innerHTML = d.dates.map((x) => `<div class="card glass mood-row"><div><b>${App.esc(x.title)}</b> <small>${x.day} ${MON[x.month - 1]}${x.years ? ' · turns ' + x.years : ''}</small><p>${x.days === 0 ? 'Today!' : x.days === 1 ? 'Tomorrow' : 'In ' + x.days + ' days'}</p></div><button class="icon-btn" data-id="${x.id}" type="button" aria-label="Delete"><svg class="ic"><use href="#i-trash"/></svg></button></div>`).join('') || '<div class="empty">No dates yet. Tell her in chat: “Riya’s birthday is 14 March”.</div>';
+    } catch { box.innerHTML = ''; }
+  }
+  $('#dateList').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-id]'); if (!b) return;
+    try { await App.api('/api/dates/' + b.dataset.id, { method: 'DELETE' }); loadDates(); } catch (err) { App.toast(err.message); }
+  });
+  $('#dAdd').addEventListener('click', async () => {
+    const t = $('#dTitle').value.trim(), w = $('#dWhen').value;
+    if (!t || !w) { App.toast('Add whose date and the day.'); return; }
+    const [y, m, d] = w.split('-').map(Number);
+    try { await App.api('/api/dates', { body: { title: t, month: m, day: d, year: y < new Date().getFullYear() ? y : null, kind: $('#dKind').value } }); $('#dTitle').value = ''; App.toast('I will remember'); loadDates(); } catch (e) { App.toast(e.message); }
+  });
+
   // ================= Review before remembering =================
   let lastPending = 0;
   async function drawPending() {
@@ -204,7 +224,7 @@
   App.hooks.onView = (v) => {
     if (prevView) prevView(v);
     if (v === 'notes') { if (cur) return; ed.style.display = 'none'; ed.hidden = true; home.hidden = false; loadNotes(); }
-    else if (v === 'tasks') loadTasks();
+    else if (v === 'tasks') { loadTasks(); loadDates(); }
     else if (v === 'memory') drawPending().catch(() => {});
   };
   ed.style.display = 'none';

@@ -1,4 +1,6 @@
 // Memory AI: one Worker serves the website (public/) and the API (/api/*).
+import { docText } from './lib/docs.js';
+import { ensureSchema } from './lib/db.js';
 import { json, now, uid, istDate, plainForSpeech } from './lib/util.js';
 import { checkAuth, login } from './lib/auth.js';
 import { getSettings, saveSettings } from './lib/settings.js';
@@ -11,7 +13,10 @@ import { speechToText, textToSpeech } from './lib/voice.js';
 import { addSub, removeSub, listSubs, sendPush, pushReady } from './lib/push.js';
 import { notifyOwner } from './lib/notify.js';
 import { saveMood, listMoods, deleteMood, moodReply } from './lib/moods.js';
+import { habitSummary, setWater, addWater } from './lib/habits.js';
+import { listDates, createDate, deleteDate } from './lib/dates.js';
 import { runCare, careTick } from './lib/care.js';
+import { periodNow } from './lib/period.js';
 import { getToday } from './lib/today.js';
 import { playTurn } from './lib/play.js';
 import { handleUpdate, setWebhook, webhookInfo } from './lib/telegram.js';
@@ -28,6 +33,7 @@ export default {
     const p = url.pathname;
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
+      if (p !== '/api/health') await ensureSchema(env);
       return await route(request, env, ctx, url, p);
     } catch (e) {
       console.error('[api]', p, e && e.stack || e);
@@ -36,6 +42,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    await ensureSchema(env);
     if (event.cron === '* * * * *') {
       ctx.waitUntil(runDueTasks(env).catch((e) => console.error('[tasks]', e)));
       ctx.waitUntil(careTick(env, event.scheduledTime).catch((e) => console.error('[care]', e)));
@@ -71,8 +78,8 @@ async function route(request, env, ctx, url, p) {
 
   // ---------- settings ----------
   if (p === '/api/settings') {
-    if (m === 'GET') return json(await getSettings(env));
-    if (m === 'PUT') return json(await saveSettings(env, await readJson(request)));
+    if (m === 'GET') { const st = await getSettings(env); return json({ ...st, periodNow: periodNow(st) }); }
+    if (m === 'PUT') { const st = await saveSettings(env, await readJson(request)); return json({ ...st, periodNow: periodNow(st) }); }
   }
 
   // ---------- chat (streams newline-delimited JSON) ----------
@@ -83,7 +90,7 @@ async function route(request, env, ctx, url, p) {
     const q = (url.searchParams.get('q') || '').trim();
     const r = q
       ? await env.DB.prepare('SELECT DISTINCT c.id,c.title,c.source,c.updated_at FROM conversations c LEFT JOIN messages m ON m.conv_id=c.id WHERE c.title LIKE ?1 OR m.content LIKE ?1 ORDER BY c.updated_at DESC LIMIT 100').bind(`%${q}%`).all()
-      : await env.DB.prepare('SELECT id,title,source,updated_at FROM conversations ORDER BY updated_at DESC LIMIT 500').all();
+      : await env.DB.prepare('SELECT id,title,source,updated_at FROM conversations ORDER BY updated_at DESC LIMIT ?').bind(Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit') || '500', 10) || 500))).all();
     return json({ conversations: r.results || [] });
   }
   let mt = p.match(/^\/api\/conversations\/([\w-]+)$/);
@@ -164,7 +171,28 @@ async function route(request, env, ctx, url, p) {
   }
   mt = p.match(/^\/api\/moods\/([\w-]+)$/);
   if (mt && m === 'DELETE') { await deleteMood(env, mt[1]); return json({ ok: true }); }
-  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss'].includes(b.what) ? b.what : null })); }
+  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease'].includes(b.what) ? b.what : null })); }
+
+  // ---------- read a file (PDF, HTML, text) ----------
+  if (p === '/api/extract' && m === 'POST') {
+    const name = (url.searchParams.get('name') || 'file').slice(0, 120);
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (!bytes.length) return json({ error: 'That file is empty.' }, 400);
+    const d = await docText(env, bytes, name, request.headers.get('content-type') || '');
+    return json({ name, kind: d.kind, text: d.text });
+  }
+
+  // ---------- water habit and dates ----------
+  if (p === '/api/habits') {
+    if (m === 'GET') return json(await habitSummary(env));
+    if (m === 'POST') { const b = await readJson(request); if (b.add !== undefined) await addWater(env, parseInt(b.add, 10) || 0); else await setWater(env, b.water); return json(await habitSummary(env)); }
+  }
+  if (p === '/api/dates') {
+    if (m === 'GET') return json({ dates: await listDates(env) });
+    if (m === 'POST') return json({ date: await createDate(env, await readJson(request)) });
+  }
+  mt = p.match(/^\/api\/dates\/([\w-]+)$/);
+  if (mt && m === 'DELETE') { await deleteDate(env, mt[1]); return json({ ok: true }); }
 
   // ---------- New Today ----------
   if (p === '/api/today' && m === 'GET') return json(await getToday(env));
@@ -317,6 +345,8 @@ async function dump(env) {
     notes: await all('notes'),
     tasks: await all('tasks'),
     moods: await all('moods'),
+    habits: await all('habits'),
+    dates: await all('dates'),
   };
 }
 

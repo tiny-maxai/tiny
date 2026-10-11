@@ -147,30 +147,37 @@
     const hint = { wordchain: 'Type a word', twenty: 'Ask a yes or no question, or make a guess', truthdare: 'Say truth, dare, or answer her' }[id];
     const quick = id === 'truthdare' ? ['Truth', 'Dare'] : id === 'wordchain' ? ['I give up'] : id === 'twenty' ? ['Give me a hint'] : [];
     body.innerHTML = `<div class="gchat" id="gchat" aria-live="polite"></div><div class="suggest" id="gq" style="justify-content:flex-start"></div><form class="gbar" id="gform"><input class="in" id="gin" placeholder="${hint}" autocomplete="off" aria-label="${hint}"><button class="btn" type="submit">Send</button><button class="btn ghost" type="button" id="gnew">New round</button></form>`;
-    let msgs = [], busy = false, finished = false;
-    const box = $('#gchat');
+    let msgs = [], busy = false, finished = false, secret = '';
+    const box = $('#gchat'), gin = $('#gin');
     const add = (role, text) => {
       const r = document.createElement('div'); r.className = 'row ' + (role === 'user' ? 'user' : 'bot');
       if (role !== 'user') r.insertAdjacentHTML('afterbegin', `<div class="av" aria-hidden="true" style="width:34px;height:34px"><img src="${App.stk('smile')}" alt=""></div>`);
       const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text; r.appendChild(b); box.appendChild(r); box.scrollTop = box.scrollHeight; return r;
     };
+    // Returns false when she is still busy, so the caller keeps what you typed instead of losing it.
     async function turn(userText) {
-      if (busy) return; busy = true;
+      if (busy) return false;
+      busy = true; gin.disabled = true;
       if (userText) { msgs.push({ role: 'user', content: userText }); add('user', userText); }
       const typing = document.createElement('div'); typing.className = 'row bot'; typing.innerHTML = '<div class="bubble typing"><i></i><i></i><i></i></div>'; box.appendChild(typing); box.scrollTop = box.scrollHeight;
       App.restPose();
       try {
-        const d = await App.api('/api/play', { body: { game: id, messages: msgs } });
+        const d = await App.api('/api/play', { body: { game: id, messages: msgs, secret } });
         typing.remove();
+        if (d.secret) secret = d.secret;
         let reply = d.reply.trim(); const m = reply.match(/GAME OVER:\s*(win|loss)/i);
-        if (m) { reply = reply.replace(/GAME OVER:\s*(win|loss)/i, '').trim(); finished = true; record(id, m[1].toLowerCase()); App.flashPose(m[1].toLowerCase() === 'win' ? 'cry' : 'excited', 3500); }
-        msgs.push({ role: 'assistant', content: reply }); add('bot', reply);
+        if (d.invalid) { msgs.pop(); add('bot', reply); App.flashPose('smile', 1500); }          // rule broken: shown, but not part of the game history
+        else {
+          if (m) { reply = reply.replace(/GAME OVER:\s*(win|loss)/i, '').trim(); finished = true; record(id, m[1].toLowerCase()); }
+          msgs.push({ role: 'assistant', content: reply }); add('bot', reply);
+        }
       } catch (e) { typing.remove(); add('bot', e.message); if (msgs.length && msgs[msgs.length - 1].role === 'user') msgs.pop(); }
-      busy = false;
+      busy = false; gin.disabled = false; if (!finished) gin.focus();
+      return true;
     }
-    $('#gform').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#gin').value.trim(); if (!v) return; $('#gin').value = ''; if (id === 'wordchain' && /^i give up$/i.test(v)) { record(id, 'done'); } turn(v); });
-    quick.forEach((q) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = q; b.addEventListener('click', () => { if (/give up/i.test(q)) record(id, 'done'); turn(q); }); $('#gq').appendChild(b); });
-    $('#gnew').addEventListener('click', () => { msgs = []; box.innerHTML = ''; finished = false; turn(''); });
+    $('#gform').addEventListener('submit', async (e) => { e.preventDefault(); const v = gin.value.trim(); if (!v || busy) return; if (finished) { App.toast('That round is over. Tap New round.'); return; } gin.value = ''; if (id === 'wordchain' && /^i give up$/i.test(v)) { record(id, 'done'); } await turn(v); });
+    quick.forEach((q) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = q; b.addEventListener('click', () => { if (busy || finished) return; if (/give up/i.test(q)) record(id, 'done'); turn(q); }); $('#gq').appendChild(b); });
+    $('#gnew').addEventListener('click', () => { if (busy) return; msgs = []; secret = ''; box.innerHTML = ''; finished = false; $('#gReact').hidden = true; turn(''); });
     turn('');
     setTimeout(() => $('#gin') && $('#gin').focus(), 80);
   }

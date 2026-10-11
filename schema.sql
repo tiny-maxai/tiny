@@ -74,3 +74,20 @@ CREATE TABLE IF NOT EXISTS moods (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_moods_day ON moods(day);
+CREATE INDEX IF NOT EXISTS idx_msg_created ON messages(created_at);
+
+-- Added in v4 ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS habits (
+  day        TEXT PRIMARY KEY,                 -- India date
+  water      INTEGER NOT NULL DEFAULT 0,       -- glasses
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dates (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL,                    -- "Riya's birthday"
+  month      INTEGER NOT NULL,
+  day        INTEGER NOT NULL,
+  year       INTEGER,                          -- birth year or first year (optional, gives the age)
+  kind       TEXT NOT NULL DEFAULT 'birthday',
+  created_at INTEGER NOT NULL
+);

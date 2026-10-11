@@ -6,10 +6,13 @@ import { complete } from './ai.js';
 const EMBED_MODEL = '@cf/baai/bge-m3';
 const CATS = ['profile', 'preference', 'project', 'people', 'plan', 'other'];
 
+// Meaning search is optional: without a Vectorize index there is nothing to compare with, so we skip the (slow) embedding call completely.
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 export async function embed(env, texts) {
+  if (!env.AI || !env.VECTORS) return null;
   try {
     const arr = Array.isArray(texts) ? texts : [texts];
-    const r = await env.AI.run(EMBED_MODEL, { text: arr.map((t) => clip(t, 2000)) });
+    const r = await withTimeout(env.AI.run(EMBED_MODEL, { text: arr.map((t) => clip(t, 2000)) }), 2500);
     const data = r && (r.data || r);
     return Array.isArray(data) && Array.isArray(data[0]) ? data : null;
   } catch (e) { console.error('[embed]', e && e.message); return null; }
@@ -81,10 +84,12 @@ export async function indexChat(env, messageId, role, text, convId) {
 
 // Always-on facts (pinned or important) plus the ones closest in meaning to the new message.
 export async function recall(env, query) {
-  const always = await env.DB.prepare('SELECT text,category FROM memories WHERE pinned=1 OR importance>=4 ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 20').all()
-    .then((r) => r.results || []).catch(() => []);
+  // the two lookups do not depend on each other, so they run together
+  const [always, vec] = await Promise.all([
+    env.DB.prepare('SELECT text,category FROM memories WHERE pinned=1 OR importance>=4 ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 20').all().then((r) => r.results || []).catch(() => []),
+    embed(env, query),
+  ]);
   let facts = [], chats = [], notes = [];
-  const vec = await embed(env, query);
   if (vec) {
     try {
       const q = await env.VECTORS.query(vec[0], { topK: 20, returnMetadata: 'all' });
