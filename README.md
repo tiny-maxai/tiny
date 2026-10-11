@@ -126,3 +126,6 @@ Send her a PDF, HTML or text file (txt, md, csv, json, code) on Telegram, with o
 
 ## Reading pictures (OCR)
 Send a photo or screenshot on Telegram (or use the paperclip on the website) and she reads the text in it (English and Hindi, handwriting as best she can), solves a question paper photo, or describes the picture. It uses Groq's free vision model with your existing GROQ_API_KEY (change the model in `GROQ_MODELS_VISION` if Groq renames it), with Workers AI as backup. Pictures are read and thrown away, never stored. Limit about 4 MB per picture. For best Telegram results send a photo normally, or as a file for sharper text.
+
+## If your keys disappear after a deploy
+`wrangler deploy` replaces the plain-text variables in the dashboard with the ones in `wrangler.toml`. This project now has `keep_vars = true` so they stay. Add keys as **Secrets** (Settings > Variables and Secrets > Add > type "Secret"), never as plain "Text". Secrets are never touched by a deploy. Your chats, memories and notes live in D1 and KV; a deploy does not delete them as long as `database_id` and the KV `id` in `wrangler.toml` are the same as before.

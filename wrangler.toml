@@ -2,6 +2,9 @@ name = "memory-ai"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"
 
+# Keep variables and secrets you added in the Cloudflare dashboard when you deploy (otherwise a deploy can wipe them).
+keep_vars = true
+
 # The website (public/) is served by the same Worker. Only /api/* runs your code first.
 [assets]
 directory = "./public"
