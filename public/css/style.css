@@ -466,3 +466,20 @@ svg.ic { color:var(--primary); }
 .loading i { width:22px; height:22px; border-radius:8px; background:var(--primary-soft); box-shadow:var(--e-sm); animation:blobpulse 1.1s ease-in-out infinite; }
 .cycle-state { margin:2px 0 12px; padding:10px 14px; border-radius:var(--radius-sm); background:var(--primary-soft); color:var(--primary-active); font-size:13.5px; font-weight:600; line-height:1.5; }
 .period-chip { color:var(--primary); }
+
+/* ---------- sidebar fit fix: nothing gets cut off on short screens ---------- */
+.sidebar { overflow-x:hidden; overflow-y:auto; scrollbar-width:thin; }
+.brand, .newchat, .side-h, .side-foot { flex:none; }
+.nav { flex:0 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; }
+.nav button { flex:none; }
+.recent { flex:1 1 90px; min-height:90px; }
+.side-foot { position:sticky; bottom:0; }
+@media (max-height:820px) {
+  .sidebar { padding:12px 12px 10px; }
+  .brand { padding:0 6px 10px; }
+  .newchat { padding:10px; margin-bottom:8px; }
+  .nav { gap:1px; }
+  .nav button { padding:5px 12px; font-size:14px; }
+  .nav button svg.ic { width:28px; height:28px; padding:6px; }
+  .side-h { padding:10px 14px 4px; }
+}
