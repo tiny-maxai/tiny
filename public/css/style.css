@@ -483,3 +483,6 @@ svg.ic { color:var(--primary); }
   .nav button svg.ic { width:28px; height:28px; padding:6px; }
   .side-h { padding:10px 14px 4px; }
 }
+
+/* ---------- recent chats: stop rows squashing and overlapping ---------- */
+.recent button { flex:none; min-height:38px; line-height:1.35; }
