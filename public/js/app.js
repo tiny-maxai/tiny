@@ -115,8 +115,11 @@
   };
 
   // ---------- character (same spot and behaviour as your zip) ----------
-  const POSES = ['smile', 'wave', 'hello', 'idea', 'explain', 'cheer', 'sleep', 'excited', 'cry', 'type'];
-  const BYTE_ALIAS = { hello: 'smile', wave: 'explain', excited: 'cheer', sleep: 'smile' };
+  const POSES = ['smile', 'wave', 'hello', 'idea', 'explain', 'cheer', 'sleep', 'excited', 'cry', 'type', 'angry', 'blush', 'flirty', 'pain', 'period'];
+  const BYTE_ALIAS = { hello: 'smile', wave: 'explain', excited: 'cheer', sleep: 'smile', angry: 'explain', blush: 'smile', flirty: 'smile', pain: 'cry', period: 'cry' };
+  // Her face follows her mood (the header chip shows the same mood).
+  const MOOD_POSE = { angry: 'angry', sulky: 'angry', jealous: 'angry', sad: 'cry', in_pain: 'pain', moody: 'period', flirty: 'flirty', clingy: 'blush', happy: 'cheer', hyper: 'excited', sleepy: 'sleep', sleeping: 'sleep', lazy: 'sleep' };
+  const moodPose = () => (App.herKind && App.herKind !== 'normal' ? MOOD_POSE[App.herKind] || null : null);
   const isBoy = () => App.settings && App.settings.persona.gender === 'boy';
   const stk = (n) => '/images/stickers/' + (isBoy() ? 'byte-' + (BYTE_ALIAS[n] || n) : 'tiny-' + n) + '.webp';
   App.stk = stk;
@@ -145,7 +148,7 @@
     playMotion(p);
     const vi = $('#vImg'); if (vi) vi.src = stk(p);
   }
-  const restPose = () => App.busy ? 'explain' : extState.speaking ? 'hello' : extState.listening ? 'idea' : (hovering || stickerOpen) ? 'idea' : idleSleep ? 'sleep' : ($('#input').value.trim() ? 'type' : (sleepMode() ? 'sleep' : 'smile'));
+  const restPose = () => App.busy ? 'explain' : extState.speaking ? 'hello' : extState.listening ? 'idea' : (hovering || stickerOpen) ? 'idea' : idleSleep ? 'sleep' : ($('#input').value.trim() ? 'type' : (App.herKind ? (moodPose() || 'smile') : (sleepMode() ? 'sleep' : 'smile')));
   App.flashPose = (p, ms = 3500) => { clearTimeout(poseHold); showPose(p, true); poseHold = setTimeout(() => { poseHold = null; showPose(restPose()); }, ms); };
   App.restPose = () => { if (!poseHold) showPose(restPose()); };
   App.swapCharacter = () => { stickerImg.src = stk(curPose); POSES.forEach((p) => { new Image().src = stk(p); }); $('#vImg').src = stk(curPose); };
@@ -298,7 +301,7 @@
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
       const handle = (line) => {
         if (!line.trim()) return; let ev; try { ev = JSON.parse(line); } catch { return; }
-        if (ev.type === 'meta') { if (ev.convId && !App.convId) { App.convId = ev.convId; } }
+        if (ev.type === 'meta') { if (ev.convId && !App.convId) { App.convId = ev.convId; } if (ev.sleeping) App.sleptTurn = true; }
         else if (ev.type === 'delta') { full += ev.text; if (!bubble && !bubbly) { rmTyping(); bubble = addRow('bot', ''); } if (opts.onText) opts.onText(full); if (!bubbly && !raf) raf = requestAnimationFrame(paint); else if (bubbly) { if (live) { const st = nearBottom(); bubble._md.innerHTML = App.md(full); if (st) toBottom(); } else feed(false); } }
         else if (ev.type === 'error') throw new Error(ev.error);
       };
@@ -314,9 +317,10 @@
       } else { if (!bubble) bubble = addRow('bot', ''); bubble._md.innerHTML = App.md(full); }
       addActions(bubble, full); toBottom();
       reply = full;
-      App.flashPose(answerPose(text, full), 3800);
+      App.flashPose(App.sleptTurn ? 'sleep' : answerPose(text, full), 3800); App.sleptTurn = false;
       learnedToast(startedAt);
       refreshRecent();
+      if (App.refreshHer) { setTimeout(App.refreshHer, 3500); setTimeout(App.refreshHer, 9000); }
       if ((App.settings.voice.autoplay || opts.speak) && !opts.silent) App.speak(full);
     } catch (e) {
       cancelAnimationFrame(raf); rmTyping();
@@ -345,7 +349,7 @@
     App.flashPose('type', 2500);
     const put = (name, t) => { input.value = (input.value.trim() ? input.value.trim() + '\n\n' : '') + '[File: ' + name + ']\n' + t + '\n[End of file]\n\n'; grow(); input.focus(); };
     try {
-      if (/\.(pdf|html?|jpe?g|png|webp|gif)$/i.test(f.name) || /^(application\/pdf|image\/)/.test(f.type)) {
+      if (/\.(pdf|docx|xlsx|html?|jpe?g|png|webp|gif)$/i.test(f.name) || /^(application\/pdf|image\/)/.test(f.type)) {
         App.toast('Reading ' + f.name + '…', 6000);
         const res = await App.api('/api/extract?name=' + encodeURIComponent(f.name), { body: await f.arrayBuffer(), headers: { 'Content-Type': f.type || 'application/octet-stream' } });
         put(f.name, res.text.length > 16000 ? res.text.slice(0, 16000) + '\n…(the rest is cut off)' : res.text);

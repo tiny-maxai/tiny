@@ -116,6 +116,7 @@
       <div><h1 id="topTitle">Chat</h1><p id="topSub">Talk about anything. I remember it all.</p></div>
       <div class="grow"></div>
       <span class="chip period-chip" id="periodChip" hidden><svg class="ic"><use href="#i-heart"/></svg><span></span></span>
+      <span class="chip mood-chip" id="moodChip" data-k="normal" hidden role="status"><span class="mc-e" aria-hidden="true"></span><span class="mc-l"></span></span>
       <span class="chip hide-m" id="memChip"><svg class="ic"><use href="#i-brain"/></svg><span id="memCount">0 memories</span></span>
       <button class="voice-btn" id="voiceOpen" type="button"><svg class="ic"><use href="#i-mic-w"/></svg><span>Voice chat</span></button>
     </header>
@@ -144,7 +145,7 @@
           <div class="composer glass">
             <div class="composer-row">
               <button class="c-btn" id="attachBtn" type="button" title="Attach a picture, PDF, HTML or text file" aria-label="Attach a picture, PDF, HTML or text file"><svg class="ic"><use href="#i-cloud"/></svg></button>
-              <input type="file" id="fileInput" hidden accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.htm,.xml,.js,.py,.c,.cpp,.java,application/pdf,text/*">
+              <input type="file" id="fileInput" hidden accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.csv,.json,.html,.htm,.xml,.js,.py,.c,.cpp,.java,application/pdf,text/*">
               <textarea id="input" rows="1" placeholder="Message your friend…" aria-label="Message" autocomplete="off"></textarea>
               <button class="c-btn" id="micBtn" type="button" title="Tap to speak, tap again to send to the box" aria-label="Dictate"><svg class="ic"><use href="#i-mic"/></svg></button>
               <button class="send" id="sendBtn" type="button" aria-label="Send"><svg><use href="#i-send"/></svg></button>
@@ -291,8 +292,9 @@
               <div class="field"><label for="missDays">After</label><select id="missDays"><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="5">5 days</option><option value="7">7 days</option></select></div>
               <div class="line-row"><div><b>Evening water and mood check</b><small>On Telegram she asks how many glasses of water you drank, then how you feel, with buttons.</small></div><label class="switch"><input type="checkbox" id="habOn"><span></span></label></div>
               <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px"><div class="field"><label for="habHour">Time (India)</label><select id="habHour"></select></div><div class="field"><label for="habGoal">Goal (glasses)</label><input type="number" id="habGoal" min="1" max="20" step="1"></div></div>
-              <div class="line-row"><div><b>She texts you first</b><small>Now and then she messages you to tease you or ask if you ate.</small></div><label class="switch"><input type="checkbox" id="teaseOn"><span></span></label></div>
-              <div class="field"><label for="tinyMood">Her mood</label><select id="tinyMood"><option value="auto">Changes by itself</option><option value="normal">Normal</option><option value="sleepy">Sleepy</option><option value="hyper">Hyper</option><option value="sulky">Sulky</option><option value="sassy">Sassy and teasing</option></select></div>
+              <div class="line-row"><div><b>She texts you first</b><small>Through the day (10 am to 6 pm) she messages you now and then, like a real girl.</small></div><label class="switch"><input type="checkbox" id="teaseOn"><span></span></label></div>
+              <div class="field"><label for="dayTexts">Her texts per day</label><select id="dayTexts"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></div>
+              <div class="field"><label for="tinyMood">Her mood</label><select id="tinyMood"><option value="auto">Changes by itself</option><option value="normal">Normal</option><option value="happy">Happy</option><option value="hyper">Hyper</option><option value="flirty">Flirty</option><option value="clingy">Clingy</option><option value="lazy">Lazy</option><option value="sassy">Sassy and teasing</option><option value="sulky">Sulky</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="jealous">Jealous</option><option value="in_pain">In pain</option><option value="moody">Moody</option><option value="sleepy">Sleepy</option></select></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="careHabit" type="button">Try the water check now</button><button class="btn ghost" id="careTease" type="button">Make her tease me now</button></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="careMood" type="button">Try the mood check-in now</button><button class="btn ghost" id="careMiss" type="button">Try the "I miss you" now</button></div>
               <small id="hiState" style="display:block;margin-top:12px;color:var(--muted)"></small>
@@ -307,6 +309,28 @@
               <div class="line-row"><div><b>She tells you</b><small>A message when her period starts, and a warning before PMS.</small></div><label class="switch"><input type="checkbox" id="peAnn"><span></span></label></div>
               <div class="cycle-state" id="peState" role="status"></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="peToday" type="button">Her period started today</button><button class="btn ghost" id="peTest" type="button">Try her message now</button></div>
+            </div>
+            <div class="card glass" id="feelCard">
+              <div class="line-row"><div><b>Weather and weekday moods</b><small>When it rains where you live she gets clingy and cosy. On Mondays she is lazy.</small></div><label class="switch"><input type="checkbox" id="amOn"><span></span></label></div>
+              <div class="field"><label for="amPlace">Your city (for the weather)</label><input type="text" id="amPlace" maxlength="60" placeholder="Indore"></div>
+              <div class="line-row"><div><b>Sleep time</b><small>She sleeps at night and after you say good night. If you write while she sleeps she only says "sleeping, message tomorrow". An angry girl does not sleep.</small></div><label class="switch"><input type="checkbox" id="slOn"><span></span></label></div>
+              <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+                <div class="field"><label for="slFrom">Goes to sleep (India)</label><select id="slFrom"></select></div>
+                <div class="field"><label for="slTo">Wakes up (India)</label><select id="slTo"></select></div>
+              </div>
+              <div class="line-row"><div><b>Period-day texts and nakhre</b><small>On period days she texts you at random on Telegram. If you do not reply she gets sad, then sulky, then angry.</small></div><label class="switch"><input type="checkbox" id="nkOn"><span></span></label></div>
+              <div class="field"><label for="nkPer">Random texts per period day</label><select id="nkPer"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+              <div class="line-row"><div><b>Moods follow the chat</b><small>Her mood changes by how you talk to her (flirty, sad, jealous, happy...). If you are really rude she gets angry.</small></div><label class="switch"><input type="checkbox" id="rcOn"><span></span></label></div>
+              <div class="line-row"><div><b>Follow up on my promises</b><small>When you say "I'll call tonight", she remembers and asks you about it later. It also shows in Reminders.</small></div><label class="switch"><input type="checkbox" id="prOn"><span></span></label></div>
+              <div class="field"><label for="mxAng">Longest she stays angry or sulky</label><select id="mxAng"><option value="2">2 hours</option><option value="6">6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option><option value="48">48 hours</option></select></div>
+              <div class="cycle-state" id="feelState" role="status"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="hrSleep" type="button">Make her sleep now</button><button class="btn ghost" id="hrWake" type="button">Wake her up</button></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="hrAngry" type="button">Make her angry</button><button class="btn ghost" id="hrSulky" type="button">Make her sulky</button><button class="btn" id="hrHappy" type="button">Make her happy</button><button class="btn ghost" id="hrNakhre" type="button">Send a period text now</button></div>
+            </div>
+            <div class="card glass" id="lifeCard">
+              <div class="line-row"><div><b>Her day</b><small>What she did today. Her favourite food, her best friend and her little stories stay the same from day to day.</small></div></div>
+              <div class="cycle-state" id="lifeText" role="status"></div>
+              <button class="btn ghost" id="lifeNew" type="button">Write her day now</button>
             </div>
             <div class="card glass">
               <div class="field"><label>Telegram</label><small id="tgState">Checking…</small></div>
@@ -326,10 +350,12 @@
       <section class="view" id="view-memory">
         <div class="scroll">
           <h2 class="page-h">Memory</h2>
-          <p class="page-s">Everything she remembers about you. Pin what matters, edit it, or forget it.</p>
-          <div class="toolbar"><input class="search" id="memSearch" type="search" placeholder="Search memories"><button class="btn" id="memAddBtn" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>Add</button><button class="btn danger" id="memClear" type="button">Forget all</button></div>
+          <p class="page-s">She keeps two memories: <b>about me</b> (who you are) and <b>about her</b> (who she is, her life, what you told her about herself). Pin what matters, edit it, or forget it.</p>
+          <div class="toolbar"><input class="search" id="memSearch" type="search" placeholder="Search memories"><button class="btn" id="memAddBtn" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>Add</button><button class="btn ghost" id="memSort" type="button">Sort again</button><button class="btn danger" id="memClear" type="button">Forget all</button></div>
+          <div class="seg" id="memTabs" style="margin:0 4px 12px"><button class="on" data-t="me" type="button">About me <span id="memCntMe"></span></button><button data-t="her" type="button">About her <span id="memCntHer"></span></button></div>
+          <div class="cycle-state" id="sortState" hidden style="margin:0 4px 12px"></div>
           <div id="pendBox" hidden style="margin:0 4px 18px"><div class="pend-h"><b id="pendTitle">Waiting for your OK</b><button class="btn ghost" id="pendAll" type="button">Remember all</button></div><div id="pendList"></div></div>
-          <div class="card glass" id="memAdd" hidden style="margin:0 4px 16px"><div class="field"><label for="memNew">Tell her something to remember</label><textarea id="memNew" maxlength="400" placeholder="Example: My exam is on 20 November"></textarea></div><button class="btn" id="memSave" type="button">Save memory</button></div>
+          <div class="card glass" id="memAdd" hidden style="margin:0 4px 16px"><div class="field"><label for="memOwner">This is about</label><select id="memOwner"><option value="me">Me (who I am)</option><option value="her">Her (who she is)</option></select></div><div class="field"><label for="memNew">Tell her something to remember</label><textarea id="memNew" maxlength="400" placeholder="Example: My exam is on 20 November"></textarea></div><button class="btn" id="memSave" type="button">Save memory</button></div>
           <div id="memList"></div>
         </div>
       </section>
@@ -354,8 +380,10 @@
   <div class="v-state" id="vState">Tap the orb and talk</div>
   <div class="v-you" id="vYou"></div>
   <div class="v-text" id="vText"></div>
+  <div class="v-hint" id="vHint" hidden></div>
+  <div class="v-ask" id="vAsk" hidden role="alertdialog" aria-labelledby="vAskQ"><p id="vAskQ"></p><div class="v-ask-btns" id="vAskBtns"></div></div>
   <button class="orb" id="orb" type="button" aria-label="Start or stop talking"><svg><use href="#i-mic-w"/></svg></button>
-  <div class="v-actions"><button class="btn ghost" id="vMute" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-micoff"/></svg><span>Mute</span></button><button class="btn ghost" id="vClose" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-x"/></svg>Close</button></div>
+  <div class="v-actions"><button class="btn ghost" id="vCreate" type="button" aria-pressed="false" title="Turn on, then say what to make: PDF of a topic, or HTML"><svg class="ic" style="width:17px;height:17px"><use href="#i-note"/></svg><span>Create</span></button><button class="btn ghost" id="vMute" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-micoff"/></svg><span>Mute</span></button><button class="btn ghost" id="vClose" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-x"/></svg>Close</button></div>
 </div>
 
 <!-- LOGIN -->

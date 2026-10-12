@@ -1,11 +1,13 @@
 // Memory AI: one Worker serves the website (public/) and the API (/api/*).
 import { docText } from './lib/docs.js';
+import { makeFile } from './lib/files.js';
+import { sendDocument } from './lib/telegram.js';
 import { ensureSchema } from './lib/db.js';
-import { json, now, uid, istDate, plainForSpeech } from './lib/util.js';
+import { bytesToB64, json, now, uid, istDate, plainForSpeech } from './lib/util.js';
 import { checkAuth, login } from './lib/auth.js';
 import { getSettings, saveSettings } from './lib/settings.js';
 import { openStream, readStream, candidates } from './lib/ai.js';
-import { prepareChat, finishChat } from './lib/chat.js';
+import { prepareChat, finishChat, sleepTurn } from './lib/chat.js';
 import { remember, forget, updateMemory, vecDelete, getPending, resolvePending } from './lib/memory.js';
 import { listNotes, getNote, createNote, saveNote, deleteNote } from './lib/notes.js';
 import { listTasks, createTask, parseTask, runTask, runDueTasks } from './lib/tasks.js';
@@ -15,13 +17,30 @@ import { notifyOwner } from './lib/notify.js';
 import { saveMood, listMoods, deleteMood, moodReply } from './lib/moods.js';
 import { habitSummary, setWater, addWater } from './lib/habits.js';
 import { listDates, createDate, deleteDate } from './lib/dates.js';
-import { runCare, careTick } from './lib/care.js';
+import { runCare, careTick, lastActive } from './lib/care.js';
+import { getHer, setHer, beforeReply, SEEN_LINE } from './lib/her.js';
+import { herView, moodKindNow } from './lib/tinymood.js';
+import { getAmbient } from './lib/ambient.js';
+import { getLife, lifeDaily } from './lib/life.js';
+import { getSortState, startSort, sortStep, sortTick } from './lib/memsort.js';
 import { periodNow } from './lib/period.js';
 import { getToday } from './lib/today.js';
 import { playTurn } from './lib/play.js';
 import { handleUpdate, setWebhook, webhookInfo } from './lib/telegram.js';
 
 const MAX_BODY = 25 * 1024 * 1024; // 25 MB, enough for long voice clips. This is a safety size, not a usage limit.
+
+async function herNow(env, st) {
+  const [her, last, ambient] = await Promise.all([getHer(env), lastActive(env).catch(() => 0), getAmbient(env, st).catch(() => null)]);
+  return herView(st, her, { period: periodNow(st), lastActive: last, ambient });
+}
+async function lifeOut(env) {
+  const l = await getLife(env), today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  return { profile: l.profile, today: (l.days.find((d) => d.day === today) || {}).text || '', earlier: l.days.filter((d) => d.day !== today).slice(-3).map((d) => d.text) };
+}
+// The first time the app is opened (and after every update that did not finish), the memories are sorted into hers and theirs.
+async function autoSort(env) { const s = await startSort(env); if (!s.done) await sortStep(env); }
+async function settingsOut(env, st) { return { ...st, periodNow: periodNow(st), her_now: await herNow(env, st) }; }
 
 async function readJson(request) {
   try { return await request.json(); } catch { return {}; }
@@ -46,6 +65,7 @@ export default {
     if (event.cron === '* * * * *') {
       ctx.waitUntil(runDueTasks(env).catch((e) => console.error('[tasks]', e)));
       ctx.waitUntil(careTick(env, event.scheduledTime).catch((e) => console.error('[care]', e)));
+      ctx.waitUntil(sortTick(env).catch((e) => console.error('[sort]', e)));
     }
     else if (event.cron === '0 21 * * 6') ctx.waitUntil(backup(env).catch((e) => console.error('[backup]', e)));
     else ctx.waitUntil(getToday(env, { force: true }).catch((e) => console.error('[today]', e)));
@@ -78,8 +98,25 @@ async function route(request, env, ctx, url, p) {
 
   // ---------- settings ----------
   if (p === '/api/settings') {
-    if (m === 'GET') { const st = await getSettings(env); return json({ ...st, periodNow: periodNow(st) }); }
-    if (m === 'PUT') { const st = await saveSettings(env, await readJson(request)); return json({ ...st, periodNow: periodNow(st) }); }
+    if (m === 'GET') { ctx.waitUntil(autoSort(env).catch((e) => console.error('[sort]', e && e.message))); return json(await settingsOut(env, await getSettings(env))); }
+    if (m === 'PUT') return json(await settingsOut(env, await saveSettings(env, await readJson(request))));
+  }
+
+  // ---------- her feelings (header chip + test buttons) ----------
+  if (p === '/api/her') {
+    const st = await getSettings(env);
+    if (m === 'POST') {
+      const b = await readJson(request);
+      if (['sleep', 'wake', 'angry', 'sulky', 'happy'].includes(b.what)) await setHer(env, st, b.what);
+      if (b.what === 'life') await lifeDaily(env, st, { force: true });
+    }
+    return json({ her: await herNow(env, st), life: await lifeOut(env) });
+  }
+
+  // ---------- sorting memories into "mine" and "hers" ----------
+  if (p === '/api/memory/sort') {
+    if (m === 'POST') { const b = await readJson(request); const s = await startSort(env, { force: !!b.force }); ctx.waitUntil(sortStep(env).catch(() => {})); return json({ sort: s }); }
+    return json({ sort: await getSortState(env) });
   }
 
   // ---------- chat (streams newline-delimited JSON) ----------
@@ -149,7 +186,8 @@ async function route(request, env, ctx, url, p) {
     const text = plainForSpeech(b.text || '');
     try {
       const st = await getSettings(env);
-      const v = await textToSpeech(env, text, { gender: st.persona.gender, language: st.persona.language, voice: st.persona.gender === 'boy' ? st.voice.boy : st.voice.girl });
+      const mood = await moodKindNow(env, st).catch(() => null);
+      const v = await textToSpeech(env, text, { mood, gender: st.persona.gender, language: st.persona.language, voice: st.persona.gender === 'boy' ? st.voice.boy : st.voice.girl });
       return new Response(v.bytes, { headers: { 'Content-Type': v.mime, 'X-Voice-Engine': v.engine, 'Cache-Control': 'private, max-age=86400' } });
     } catch (e) { return json({ error: e.message, fallback: true }, e.status || 502); }
   }
@@ -171,7 +209,25 @@ async function route(request, env, ctx, url, p) {
   }
   mt = p.match(/^\/api\/moods\/([\w-]+)$/);
   if (mt && m === 'DELETE') { await deleteMood(env, mt[1]); return json({ ok: true }); }
-  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease'].includes(b.what) ? b.what : null })); }
+  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre'].includes(b.what) ? b.what : null })); }
+
+  // ---------- make a file from voice chat: build it, send it to Telegram (or hand it back to download) ----------
+  if (p === '/api/make' && m === 'POST') {
+    const b = await readJson(request);
+    const kind = ['pdf', 'html', 'csv', 'md', 'docx', 'xlsx'].includes(b.kind) ? b.kind : 'pdf';
+    const text = String(b.text || '').trim().slice(0, 1500);
+    let context = '';
+    if (b.convId) {
+      const r = await env.DB.prepare('SELECT role,content FROM messages WHERE conv_id=? ORDER BY id DESC LIMIT 10').bind(String(b.convId)).all().catch(() => ({ results: [] }));
+      context = (r.results || []).reverse().map((x) => (x.role === 'user' ? 'Person: ' : 'Assistant: ') + String(x.content).slice(0, 1200)).join('\n');
+    }
+    const extra = (context ? '# The conversation so far (the topic may be "this", meaning what they were just talking about)\n' + context + '\n\n' : '') + '# What they just said (it may be spoken, with mistakes)\n' + text;
+    const f = await makeFile(env, kind, 'Make this file about the topic the person asked for. If they named a topic use that; if they said "this" or did not name one, use what the conversation was about.', extra, text);
+    let sent = false;
+    if (env.TELEGRAM_BOT_TOKEN && env.OWNER_TG_ID) { const r = await sendDocument(env, env.OWNER_TG_ID, f.bytes, f.name, 'Here is your ' + kind.toUpperCase() + ' file.', f.mime); sent = !!(r && r.ok); }
+    if (sent) return json({ ok: true, sent: true, name: f.name });
+    return json({ ok: true, sent: false, name: f.name, mime: f.mime, b64: bytesToB64(f.bytes) });
+  }
 
   // ---------- read a file (PDF, HTML, text) ----------
   if (p === '/api/extract' && m === 'POST') {
@@ -290,7 +346,15 @@ async function chat(request, env, ctx) {
   if (!text) return json({ error: 'Say something first.' }, 400);
   const via = b.via === 'voice' ? 'voice' : 'text';
   const spoken = b.spoken === true;
-  const prep = await prepareChat(env, { convId: b.convId || null, text, source: 'web', via, spoken, noteId: b.noteId || null });
+  const settings = await getSettings(env);
+  const gate = await beforeReply(env, settings, text);
+  if (gate.sleeping) {                                  // she is asleep: no AI. She shows "seen", keeps your message and answers in the morning
+    const id = await sleepTurn(env, { convId: b.convId || null, text, source: 'web', via, reply: SEEN_LINE });
+    const enc = new TextEncoder();
+    const lines = [{ type: 'meta', convId: id, model: 'sleeping', sleeping: true, at: now() }, { type: 'delta', text: SEEN_LINE }, { type: 'done' }].map((o) => JSON.stringify(o) + '\n').join('');
+    return new Response(enc.encode(lines), { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' } });
+  }
+  const prep = await prepareChat(env, { convId: b.convId || null, text, source: 'web', via, spoken, noteId: b.noteId || null, gate });
 
   let out;
   try { out = await openStream(env, { brain: prep.settings.brain, messages: prep.messages, temperature: 0.8, maxTokens: 1800 }); }

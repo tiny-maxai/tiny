@@ -486,3 +486,30 @@ svg.ic { color:var(--primary); }
 
 /* ---------- recent chats: stop rows squashing and overlapping ---------- */
 .recent button { flex:none; min-height:38px; line-height:1.35; }
+/* ---------- her mood chip in the header (next to the period day) ---------- */
+.mood-chip { gap:6px; color:var(--ink); }
+.mood-chip .mc-e { font-size:16px; line-height:1; }
+.mood-chip[data-k="angry"] { color:#C62828; }
+.mood-chip[data-k="sad"], .mood-chip[data-k="sulky"] { color:#37609E; }
+.mood-chip[data-k="in_pain"], .mood-chip[data-k="moody"], .mood-chip[data-k="jealous"] { color:#B3412F; }
+.mood-chip[data-k="flirty"], .mood-chip[data-k="clingy"] { color:#C2185B; }
+.mood-chip[data-k="sleeping"], .mood-chip[data-k="sleepy"] { color:var(--muted); }
+@media (max-width:520px) { .mood-chip .mc-l { display:none; } .mood-chip { padding:9px 11px; } }
+
+/* ---- voice: create a file ---- */
+.v-hint { max-width:520px; text-align:center; font-size:13.5px; font-weight:600; color:var(--primary); background:var(--primary-soft); border-radius:999px; padding:8px 16px; }
+.v-ask { max-width:520px; width:100%; background:var(--surface); border-radius:28px; padding:18px 20px; text-align:center; box-shadow:var(--e-md); position:relative; z-index:3; }
+.v-ask p { margin:0 0 14px; font-size:16px; font-weight:600; color:var(--ink); line-height:1.4; }
+.v-ask-btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+#vCreate.on { background:var(--primary); color:#fff; }
+#vCreate.on .ic { color:#fff; }
+.voice-ov { overflow-y:auto; gap:14px; }
+.voice-ov .v-char { width:min(240px,30vh); flex-shrink:0; }
+.voice-ov .orb, .voice-ov .v-actions, .voice-ov .v-ask { flex-shrink:0; }
+@media (max-height:700px) { .voice-ov .v-char { width:min(150px,22vh); } .v-text { min-height:24px; } }
+.voice-ov { justify-content:flex-start; }
+.voice-ov > :first-child { margin-top:auto; }
+.voice-ov > :last-child { margin-bottom:auto; }
+.voice-ov .v-char { width:min(220px,24vh); }
+.voice-ov .v-text:empty, .voice-ov .v-you:empty { display:none; }
+.voice-ov .v-actions { margin-top:8px; }

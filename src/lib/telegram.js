@@ -1,5 +1,10 @@
 // Telegram bot: same brain, same memories as the website. Only OWNER_TG_ID may talk to it.
-import { chatOnce, finishChat } from './chat.js';
+import { chatOnce, finishChat, sleepTurn } from './chat.js';
+import { beforeReply, sleepingLine, getHer } from './her.js';
+import { herView, moodKindNow } from './tinymood.js';
+import { getAmbient } from './ambient.js';
+import { periodNow } from './period.js';
+import { lastActive } from './care.js';
 import { remember } from './memory.js';
 import { speechToText, textToSpeech } from './voice.js';
 import { getSettings, saveSettings } from './settings.js';
@@ -23,13 +28,28 @@ export async function send(env, chat, text) {
   // Telegram messages max out at 4096 characters.
   for (let i = 0; i < text.length; i += 3900) await api(env, 'sendMessage', { chat_id: chat, text: text.slice(i, i + 3900) });
 }
+// Her stickers live on the website. Telegram fetches them by URL, so the site address is remembered the first time the bot is used.
+async function stickerUrl(env, name) {
+  const origin = await env.KV.get('origin').catch(() => null);
+  return origin ? `${origin}/images/stickers/tiny-${name}.webp` : null;
+}
+export async function sendSticker(env, chat, name) {
+  const url = await stickerUrl(env, name);
+  if (!url) return false;
+  const r = await api(env, 'sendSticker', { chat_id: chat, sticker: url });
+  return !!(r && r.ok);
+}
+export const sendStickerToOwner = (env, name) => (env.OWNER_TG_ID && env.TELEGRAM_BOT_TOKEN ? sendSticker(env, env.OWNER_TG_ID, name).catch(() => false) : Promise.resolve(false));
+// A small "seen" mark on your message (used while she sleeps).
+const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { chat_id: chat, message_id: messageId, reaction: [{ type: 'emoji', emoji }] }).catch(() => null);
+
 export async function sendWithButtons(env, chat, text, rows) {
   return api(env, 'sendMessage', { chat_id: chat, text: text.slice(0, 3900), reply_markup: { inline_keyboard: rows.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } });
 }
 async function sendVoice(env, chat, text) {
   try {
     const st = await getSettings(env);
-    const v = await textToSpeech(env, clip(plainForSpeech(text), 900), { gender: st.persona.gender, language: st.persona.language, mp3: true });
+    const v = await textToSpeech(env, clip(plainForSpeech(text), 900), { mood: await moodKindNow(env, st).catch(() => null), gender: st.persona.gender, language: st.persona.language, mp3: true });
     const fd = new FormData();
     fd.append('chat_id', String(chat));
     fd.append('audio', new Blob([v.bytes], { type: v.mime }), 'reply.' + v.ext);
@@ -43,12 +63,30 @@ export async function sendDocument(env, chat, bytes, name, caption, mime = 'text
   fd.append('document', new Blob([bytes], { type: mime }), name);
   return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({}));
 }
-async function fileToChat(env, chat, kind, text, quoted = '') {
+// Reads a Telegram photo/file; the text is kept for 6 hours so replying to the same picture again is instant.
+async function readMedia(env, d) {
+  const key = d.file_unique_id ? 'tg:media:' + d.file_unique_id : '';
+  if (key) { const c = await env.KV.get(key, 'json').catch(() => null); if (c && c.text) return c; }
+  const f = await downloadVoice(env, d.file_id);
+  const r = await docText(env, f.bytes, d.file_name || 'file', d.mime_type || '');
+  if (key) await env.KV.put(key, JSON.stringify({ kind: r.kind, text: clip(r.text, 20000) }), { expirationTtl: 6 * 3600 }).catch(() => {});
+  return r;
+}
+const SOLVE_WORDS = /\b(solve|solution|hal|hl|doubt|step ?by ?step|sawal)\b|हल|समझा|सॉल्व|जवाब|डाउट/i;
+const looksLikeQuestion = (t) => /\?|\b(find|calculate|solve|prove|evaluate|simplify|what is|how many|show that|derive|state|explain|why|which)\b|\d\s*[-+*/=^x×÷]\s*\d|^\s*(q\.?\s*)?\d+[.)]/im.test(String(t || '')) && String(t || '').length > 12;
+const SOLVE_RULES = `DOUBT SOLVER MODE: they sent a question (the text above came from their photo or file). Solve it for real, like a clever friend tutoring them. Do it in your own voice (cute, warm, short sentences), in the language they use (Hinglish if unsure).
+1. One line: what the question is asking.
+2. Numbered steps, each short, with the working shown (formulas, numbers, why you do it).
+3. "Answer:" on its own line with the final result and units.
+4. One small tip to remember it.
+If there are several questions, solve each one in turn. If something in the picture is unclear, say which part and what you assumed. Never guess silently.`;
+async function fileToChat(env, chat, kind, text, quoted = '', material = '', solve = false) {
   await send(env, chat, `On it, making your ${kind.toUpperCase()} file...`);
   await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_document' });
   let extra = quoted ? `# The message they replied to\n${quoted}\n\n` : '';
+  if (material) extra += `# The picture or file they replied to\n${clip(material, 8000)}\n\n`;
   if (/\bnotes?\b/i.test(text)) { const n = await notesFor(env, text); extra += n.notes.map((x) => `# ${x.title}\n${x.text}`).join('\n\n'); }
-  const f = await makeFile(env, kind, text, extra);
+  const f = await makeFile(env, kind, solve ? text + '\n\nSolve every question in the material step by step. Put each question, its numbered steps and the final answer in the file.' : text, extra, '', Boolean(material));
   const res = await sendDocument(env, chat, f.bytes, f.name, 'Here you go. Tell me what to change and I will make a new version.', f.mime);
   if (!res.ok) await send(env, chat, 'I made it but Telegram would not take the file. Try again?');
 }
@@ -75,6 +113,7 @@ export async function handleUpdate(request, env, ctx) {
   if (update && update.callback_query) { ctx.waitUntil(handleButton(env, update.callback_query).catch((e) => console.error('[tg btn]', e && e.message))); return new Response('ok'); }
   const msg = update && update.message;
   if (!msg || !msg.chat) return new Response('ok');
+  ctx.waitUntil(env.KV.get('origin').then((o) => { const n = new URL(request.url).origin; return o === n ? null : env.KV.put('origin', n); }).catch(() => null));
   ctx.waitUntil(processMessage(env, msg).catch((e) => console.error('[tg]', e && e.message)));
   return new Response('ok');
 }
@@ -119,16 +158,19 @@ async function processMessage(env, msg) {
   let text = (msg.text || msg.caption || '').trim();
   let via = 'text';
   let fileCtx = '';
-  if (msg.document || msg.photo) {
-    const d = msg.document || { file_id: msg.photo[msg.photo.length - 1].file_id, file_size: msg.photo[msg.photo.length - 1].file_size, file_name: 'photo.jpg', mime_type: 'image/jpeg' };
-    if ((d.file_size || 0) > 18 * 1024 * 1024) { await send(env, chat, 'That file is too big for me (the limit is about 18 MB).'); return; }
+  const fileOf = (m) => m && (m.document || (m.photo && m.photo.length ? { file_id: m.photo[m.photo.length - 1].file_id, file_unique_id: m.photo[m.photo.length - 1].file_unique_id, file_size: m.photo[m.photo.length - 1].file_size, file_name: 'photo.jpg', mime_type: 'image/jpeg' } : null));
+  let mediaKind = '';
+  const rmMedia = !(msg.document || msg.photo) && msg.reply_to_message ? fileOf(msg.reply_to_message) : null;   // you swiped a photo or file and wrote on it
+  const media = fileOf(msg) || rmMedia;
+  if (media) {
+    if ((media.file_size || 0) > 18 * 1024 * 1024) { await send(env, chat, 'That file is too big for me (the limit is about 18 MB).'); return; }
     await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
     try {
-      const f = await downloadVoice(env, d.file_id);
-      const r = await docText(env, f.bytes, d.file_name || 'file', d.mime_type || '');
-      fileCtx = fileMessage(d.file_name || 'file', r.text, '');
+      const r = await readMedia(env, media);
+      mediaKind = r.kind;
+      fileCtx = fileMessage(media.file_name || 'file', r.text, '');
       fileCtx = fileCtx.slice(0, fileCtx.lastIndexOf('[End of file]') + 13);
-      if (!text) text = r.kind === 'picture' ? 'Look at this picture. Tell me in a few short lines what it says or shows, and ask what I want to do with it.' : 'Read this file, tell me in a few short lines what it is about, and ask what I want to do with it.';
+      if (!text) text = r.kind === 'picture' && looksLikeQuestion(r.text) ? 'Solve this question step by step.' : r.kind === 'picture' ? 'Look at this picture. Tell me in a few short lines what it says or shows, and ask what I want to do with it.' : 'Read this file, tell me in a few short lines what it is about, and ask what I want to do with it.';
     } catch (e) { await send(env, chat, e.message || 'I could not read that file.'); return; }
   }
   if (msg.voice || msg.audio) {
@@ -151,7 +193,7 @@ async function processMessage(env, msg) {
   const [cmd, ...restParts] = text.split(/\s+/);
   const rest = restParts.join(' ').trim();
 
-  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
+  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /docx /xlsx /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n/mood  how she feels right now\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
   if (/^\/new/i.test(cmd)) { await env.KV.delete(kvKey); await send(env, chat, 'Fresh chat started. I still remember everything about you.'); return; }
   if (/^\/remember/i.test(cmd)) {
     if (!rest) { await send(env, chat, 'Tell me what: /remember I love mango lassi'); return; }
@@ -163,6 +205,11 @@ async function processMessage(env, msg) {
       const d = await getToday(env);
       await send(env, chat, d.greeting + '\n\n' + d.ideas.map((i, n) => `${n + 1}. ${i.title} (${i.minutes} min)\n   ${i.why}`).join('\n\n'));
     } catch (e) { await send(env, chat, e.message); }
+    return;
+  }
+  if (/^\/mood\b/i.test(cmd)) {
+    const v = herView(settings, await getHer(env), { period: periodNow(settings), lastActive: await lastActive(env), ambient: await getAmbient(env, settings).catch(() => null) });
+    await send(env, chat, `${settings.persona.name} feels: ${v.emoji} ${v.label}${v.angry ? '. Make her happy to calm her down.' : v.sleeping ? '. She is sleeping.' : ''}`);
     return;
   }
   if (/^\/voice/i.test(cmd)) {
@@ -188,18 +235,28 @@ async function processMessage(env, msg) {
   }
   const fileKind = wantsFile(text);
   if (fileKind) {
-    try { await fileToChat(env, chat, fileKind, text, quoted); } catch (e) { await send(env, chat, e.message || 'Could not make the file.'); }
+    try { await fileToChat(env, chat, fileKind, text, quoted, fileCtx, SOLVE_WORDS.test(text) || (mediaKind === 'picture' && looksLikeQuestion(fileCtx) && /\b(solve|hal|answer)\b/i.test(text))); } catch (e) { await send(env, chat, e.message || 'Could not make the file.'); }
     return;
   }
   if (/^\/search\b/i.test(cmd) && !rest) { await send(env, chat, 'Tell me what to look up: /search best laptops under 50000'); return; }
   if (urlsIn(text).length || needsSearch(text)) await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
 
-  await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
   const convId = (await env.KV.get(kvKey)) || null;
+  // She sleeps from 11 pm to 7 am and after you say good night: no AI, one short "sleeping" line, then she stays quiet.
+  const gate = await beforeReply(env, settings, text);
+  if (gate.sleeping) {
+    const id = await sleepTurn(env, { convId, text, source: 'telegram', via, reply: '' });   // saved and queued: she answers in the morning
+    if (!convId) await env.KV.put(kvKey, id);
+    if (gate.quiet) await react(env, chat, msg.message_id, '😴');                              // already told you once: just "seen"
+    else if (!(await sendSticker(env, chat, 'sleep'))) await send(env, chat, sleepingLine(settings));
+    return;
+  }
+  await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
   const wantVoice = via === 'voice' || settings.voice.autoplay;
   try {
-    const chatText = (fileCtx ? fileCtx + '\n\n' : '') + (quoted ? `(I am replying to this earlier message: "${quoted}")\n\n${text}` : text);
-    const r = await chatOnce(env, { convId, text: chatText, source: 'telegram', via, spoken: wantVoice });
+    const solving = Boolean(fileCtx) && (SOLVE_WORDS.test(text) || (mediaKind === 'picture' && /^Solve this question/.test(text)));
+    const chatText = (fileCtx ? fileCtx + '\n\n' : '') + (solving ? SOLVE_RULES + '\n\n' : '') + (quoted ? `(I am replying to this earlier message: "${quoted}")\n\n${text}` : text);
+    const r = await chatOnce(env, { convId, text: chatText, source: 'telegram', via, spoken: wantVoice, gate, brain: solving ? 'solve' : undefined });
     if (!convId) await env.KV.put(kvKey, r.convId);
     if (wantVoice) await send(env, chat, r.reply); else await sendBubbles(env, chat, r.reply, settings.chat.bubbles);
     if (wantVoice) await sendVoice(env, chat, r.reply);

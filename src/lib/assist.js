@@ -20,7 +20,8 @@ Return ONLY JSON: {"action":"reminder"|"note"|"date"|"none","reminder":{"prompt"
 - note: they ask you to save, write or note something down. If they say "note this/that" they mean your previous message: use it as the content.
 - date: they tell you a birthday, anniversary or special day to remember.
 - none: questions about reminders or notes, small talk, or anything else. When unsure choose none.
-Only include the object for the chosen action.`;
+Only include the object for the chosen action.
+Who is who: "me/my/I/main/mera/mujhe" = the person talking; "you/your/tum/tera/aap" = you, the assistant (so "your birthday" is the assistant's own date: title it "<assistant>'s birthday", and "remind you" is NOT a reminder for the person: use none). "Remind me" and "my birthday" are the person's own.`;
   const r = await complete(env, { brain: 'fast', temperature: 0.1, maxTokens: 500, json: true, messages: [{ role: 'system', content: sys }, { role: 'user', content: (prev ? 'Your previous message to them:\n' + clip(prev, 1500) + '\n\n' : '') + 'Their latest message:\n' + clip(text, 1500) }] });
   return parseJsonLoose(r.text);
 }

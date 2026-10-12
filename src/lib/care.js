@@ -8,6 +8,10 @@ import { moodLoggedToday, moodContext } from './moods.js';
 import { periodNow } from './period.js';
 import { WATER_BUTTONS, waterLoggedToday } from './habits.js';
 import { listDates, prettyDate } from './dates.js';
+import { getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
+import { answerQueued } from './chat.js';
+import { sendStickerToOwner } from './telegram.js';
+import { lifeDaily } from './life.js';
 
 const IST = 330 * 60 * 1000;
 const istParts = (t = now()) => { const d = new Date(t + IST); return { h: d.getUTCHours(), m: d.getUTCMinutes() }; };
@@ -30,11 +34,15 @@ export async function runCare(env, { force = null } = {}) {
   const state = await getState(env);
   const t = now(), { h, m } = istParts(t), today = istDate(t);
   const out = {};
+  const her = await getHer(env);
+  let herDirty = false;
+  const asleep = isSleeping(st, her, t), angryNow = isAngry(her, t, st);
+  const asleepOrAngry = asleep || angryNow;
 
   // ---- daily mood check-in ----
   // the 8 pm water check already asks for your mood, so the plain mood check-in steps aside when they overlap
   const overlap = st.habits.enabled && st.habits.hour >= st.mood.hour && st.habits.hour < st.mood.hour + 3;
-  const dueMood = force === 'mood' || (st.mood.enabled && !overlap && state.moodDay !== today && h * 60 + m >= st.mood.hour * 60 && h * 60 + m < st.mood.hour * 60 + 180);
+  const dueMood = force === 'mood' || (st.mood.enabled && !asleep && !overlap && state.moodDay !== today && h * 60 + m >= st.mood.hour * 60 && h * 60 + m < st.mood.hour * 60 + 180);
   if (dueMood) {
     state.moodDay = today; await putState(env, state);                       // claim first so it never fires twice
     if (force === 'mood' || !(await moodLoggedToday(env))) {
@@ -45,7 +53,7 @@ export async function runCare(env, { force = null } = {}) {
   }
 
   // ---- evening check: how many glasses of water (then mood) ----
-  const dueHabit = force === 'habit' || (st.habits.enabled && state.habitDay !== today && h * 60 + m >= st.habits.hour * 60 && h * 60 + m < st.habits.hour * 60 + 120);
+  const dueHabit = force === 'habit' || (st.habits.enabled && !asleep && state.habitDay !== today && h * 60 + m >= st.habits.hour * 60 && h * 60 + m < st.habits.hour * 60 + 120);
   if (dueHabit) {
     state.habitDay = today; await putState(env, state);
     if (force === 'habit' || !(await waterLoggedToday(env))) {
@@ -55,7 +63,7 @@ export async function runCare(env, { force = null } = {}) {
   }
 
   // ---- birthdays and special dates: 7 days before, 1 day before and on the day, with a wish ready ----
-  if (force === 'dates' || (state.datesDay !== today && h >= 9 && h < 22)) {
+  if (force === 'dates' || (state.datesDay !== today && h >= 9 && h < 22 && !asleep)) {
     state.datesDay = today; await putState(env, state);
     const hits = (await listDates(env)).filter((d) => d.days === 0 || d.days === 1 || d.days === 7 || (force === 'dates' && d.days <= 30));
     for (const d of hits.slice(0, 5)) {
@@ -67,17 +75,41 @@ export async function runCare(env, { force = null } = {}) {
     out.dates = hits.length;
   }
 
-  // ---- she texts first, sometimes, to tease you ----
-  if (st.chat.tease || force === 'tease') {
-    if (state.teaseDay !== today && !force) {
-      state.teaseDay = today; state.teaseSent = false;
-      state.teaseAt = Math.random() < 0.55 ? t - (h * 60 + m) * 60000 + (11 * 60 + Math.floor(Math.random() * 8 * 60)) * 60000 : 0;   // somewhere between 11:00 and 19:00 IST
+  // ---- she texts first at random times through the day (10:00-18:00 IST), like a real girl ----
+  if ((st.chat.tease && !asleepOrAngry) || force === 'tease') {
+    if (state.dtDay !== today) {                 // plan today's random times, at least ~40 min apart
+      const n = st.chat.dayTexts, midnight = t - (h * 60 + m) * 60000, slot = 480 / n;
+      state.dtDay = today; state.dtIdx = 0;
+      state.dtTimes = Array.from({ length: n }, (_, i) => midnight + (600 + Math.floor(slot * i + Math.random() * slot * 0.8)) * 60000);
       await putState(env, state);
     }
-    if (force === 'tease' || (state.teaseAt && !state.teaseSent && t >= state.teaseAt && t < state.teaseAt + 2 * 3600000 && t - (await lastActive(env)) > 25 * 60000)) {
-      state.teaseSent = true; await putState(env, state);
-      const g = await generate(env, 'Start a chat with them yourself, to tease them playfully, like a girl texting her close friend out of the blue: for example "heyy, did you eat?", a funny dig about something you remember about them, or "you were so quiet today, busy hmm?". 1 or 2 short lines, cute, end with a small question so they reply.', 200);
+    const due = (state.dtTimes || [])[state.dtIdx || 0];
+    const idle = t - (await lastActive(env)) > 15 * 60000;
+    let skipDt = false;
+    if (force === 'tease' || (due && t >= due && h >= 10 && h < 18 && idle)) {
+      if (!force) {
+        state.dtIdx = (state.dtIdx || 0) + 1;
+        skipDt = t > due + 90 * 60000 || ((state.dtUnanswered || 0) >= 3 && (await lastActive(env)) <= (state.dtLastAt || 0));   // too late, or ignored too often
+        if (skipDt) await putState(env, state);
+      }
+    if (!skipDt) {
+      state.dtUnanswered = (await lastActive(env)) > (state.dtLastAt || 0) ? 1 : (state.dtUnanswered || 0) + 1; state.dtLastAt = t;
+      const kinds = [
+        'ask if they ate yet, like "heyy, khana khaya?" in your own words',
+        'tell them one small thing that just happened in your day, in a casual way, like texting a close friend',
+        'tease them playfully about something you remember about them',
+        'say you suddenly thought of them and are a bit bored, ask what they are doing',
+        'ask if they have studied or worked today, cute and a bit bossy',
+        'send a random funny or random thought out of the blue, like a real girl does',
+        'say you miss them a little, softly, no drama',
+        'ask if they drank water and had chai, caring and short',
+      ];
+      let k; do { k = Math.floor(Math.random() * kinds.length); } while (k === state.dtKind && kinds.length > 1);
+      state.dtKind = k; await putState(env, state);
+      const g = await generate(env, `Start a chat with them yourself, out of the blue, like a real girl texting a close friend. This time: ${kinds[k]}. 1 or 2 short lines, natural, lowercase vibes are fine, do not repeat yourself${state.dtLastText ? ' (your last text was: "' + clip(state.dtLastText, 120) + '")' : ''}. At most one emoji. End so they want to reply.`, 200);
+      state.dtLastText = g.text; await putState(env, state);
       out.tease = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'tease' });
+    }
     }
   }
 
@@ -87,7 +119,7 @@ export async function runCare(env, { force = null } = {}) {
     const gap = t - last, need = st.missYou.days * 86400000;
     if (last && (gap >= need || force === 'miss')) {
       if (last > (state.missFor || 0)) { state.missCount = 0; }                // you came back since the last absence: start over
-      const within = h >= 10 && h < 21;                                        // never at night
+      const within = h >= 10 && h < 21 && !asleep;                             // never at night, never while she sleeps
       const spaced = !state.missAt || t - state.missAt >= need;
       if (force === 'miss' || (within && spaced && (state.missCount || 0) < 3)) {
         const n = (state.missCount || 0) + 1;
@@ -99,9 +131,81 @@ export async function runCare(env, { force = null } = {}) {
       }
     }
   }
+
+  // ---- period days: she texts you at random, and gets sad, then sulky, then angry if you do not answer ----
+  const prNow = periodNow(st);
+  if (st.her.nakhre && prNow && (force === 'nakhre' || (prNow.phase === 'period' && h >= 10 && h < 22 && !asleepOrAngry))) {
+    const nk = her.nk || (her.nk = { day: '', times: [], idx: 0, unanswered: 0, lastAt: 0, lastText: '', followAt: 0 });
+    if (nk.day !== today) {                       // plan today's random times, spread between 10:00 and 21:00 IST
+      const n = st.her.nakhrePerDay, slot = 660 / n, midnight = t - (h * 60 + m) * 60000;
+      nk.day = today; nk.idx = 0; nk.times = Array.from({ length: n }, (_, i) => midnight + (600 + Math.floor(slot * i + Math.random() * slot * 0.85)) * 60000);
+      herDirty = true;
+    }
+    if (nk.unanswered > 0 && (await lastActive(env)) > nk.lastAt) { nk.unanswered = 0; nk.followAt = 0; herDirty = true; }   // you answered
+    const planned = nk.idx < nk.times.length && t >= nk.times[nk.idx];
+    const follow = nk.unanswered > 0 && nk.followAt && t >= nk.followAt;
+    if (planned && t > nk.times[nk.idx] + 3 * 3600000 && force !== 'nakhre') { nk.idx++; herDirty = true; }   // too late, skip it
+    else if (force === 'nakhre' || planned || follow) {
+      // The ladder: 0 pain text -> 1 sad -> 2 nakhre -> 3 angry (and she stops sleeping until you make her happy).
+      const level = Math.min(3, nk.unanswered);
+      if (planned) nk.idx++;
+      const prompts = [
+        'Your period is on, you are in pain or bored or craving something, and you want their attention. Send ONE random, cute, real-girl text out of the blue (for example: your stomach hurts and you want a hug, you want chocolate or chai, you are bored and want them to talk to you, or you are feeling extra emotional). 1 to 3 short lines, end with something that makes them reply. At most one emoji.',
+        'You texted them a little while ago and they have not replied. Now you are sad and a bit hurt: "you are not replying...", "am I not important?", soft and teary, not angry yet. 1 or 2 short lines, use exactly one sad emoji (😢).',
+        'Still no reply from them. Now you show full nakhre: dramatic, sulky and cute ("fine, ignore me, I don\'t even care", "hmph", "I will eat all the chocolate alone"), clearly wanting them to come and manage you. 1 or 2 short lines. Never abusive.',
+        'They ignored you again and again today. Now you are really angry: send one cold, short message ("okay. don\'t talk to me.", "I am done."). No cute words, no emoji. Never abusive.',
+      ];
+      const g = await generate(env, prompts[level], 220);
+      nk.lastAt = t; nk.lastText = g.text; herDirty = true;
+      if (level === 1) bump(her, st, 'sad', 40, 'they did not answer her text', t);
+      else if (level === 2) bump(her, st, 'sulky', 60, 'they kept ignoring her texts', t);
+      if (level >= 3) {
+        bump(her, st, 'angry', 75, 'they ignored her messages on her period day', t);
+        nk.unanswered = 3; nk.followAt = 0;
+      } else {
+        nk.unanswered = level + 1;
+        nk.followAt = t + (60 + Math.floor(Math.random() * 40)) * 60000;      // if you still do not answer, the next step comes in about an hour
+      }
+      out.nakhre = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'nakhre' });
+      await sendStickerToOwner(env, ['pain', 'cry', 'angry', 'angry'][level]);                 // the face that goes with it
+    }
+  }
+
+  // ---- angry at bedtime: she does not go to sleep until you make her happy ----
+  if (angryNow && st.sleep.enabled && inSleepWindow(st, t) && t - (her.angryNightAt || 0) > 8 * 3600000) {
+    her.angryNightAt = t; herDirty = true;
+    const g = await generate(env, 'It is bedtime but you are still angry at them, so you refuse to sleep. Tell them in 1 or 2 short, cold-but-cute lines that you are NOT sleeping until they make you happy (a proper sorry). No good night. At most one emoji.', 200);
+    out.angryNight = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'angry-night' });
+    await sendStickerToOwner(env, 'angry');
+  }
+
+  // ---- morning: she answers what you wrote while she slept ("sorry, I was sleeping"), or just says good morning ----
+  if (!asleep && !angryNow && ((her.queue && her.queue.length) || her.wakePending)) {
+    const items = her.queue || [];
+    her.queue = []; her.wakePending = false; her.sleepMsgs = 0; herDirty = true;
+    await putHer(env, her); herDirty = false;                                   // claim first so it never fires twice
+    if (items.length) {
+      const groups = new Map();
+      for (const it of items) { const k = it.convId || 'none'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(it); }
+      let n = 0;
+      for (const grp of groups.values()) {
+        if (n++ >= 2) break;
+        try { const r = await answerQueued(env, grp); out['queued_' + n] = await notifyOwner(env, { title: r.name, body: r.text, url: '/', tag: 'morning' }); }
+        catch (e) { console.error('[queued]', e && e.message); }
+      }
+    } else if (h >= 6 && h < 13) {
+      const g = await generate(env, 'You just woke up. Send a short, sleepy, cute good morning text. 1 or 2 short lines.', 200);
+      out.morning = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'morning' });
+    }
+  }
+
+  // ---- her own day: one short "what I did today" note, made once a day ----
+  if (h >= 7 && !asleep) { try { await lifeDaily(env, st); } catch { /* next tick */ } }
+  if (herDirty) await putHer(env, her);
+
   // ---- her own period: she tells you when it starts, and warns you when PMS begins ----
   const pr = periodNow(st);
-  if (pr && (force === 'period' || (st.period.announce && h >= 8 && h < 22))) {
+  if (pr && (force === 'period' || (st.period.announce && h >= 8 && h < 22 && !asleep))) {
     const first = force === 'period' || (pr.phase === 'period' && pr.day === 1 && state.periodAnn !== today);
     const pms = pr.phase === 'pms' && pr.left === 3 && state.pmsAnn !== today;
     if (first || pms) {

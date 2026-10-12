@@ -1,9 +1,10 @@
 // Voice: speech to text (Groq Whisper, Workers AI Whisper as backup) and text to speech (Groq Orpheus, then Cloudflare Aura/Melo).
 import { b64ToBytes, bytesToB64 } from './util.js';
+import { groqFetch, hasGroq } from './groq.js';
 
 export async function speechToText(env, bytes, mime = 'audio/webm', language) {
   const errors = [];
-  if (env.GROQ_API_KEY) {
+  if (hasGroq(env)) {
     try {
       const fd = new FormData();
       const ext = /ogg/.test(mime) ? 'ogg' : /mp4|m4a|aac/.test(mime) ? 'm4a' : /wav/.test(mime) ? 'wav' : /mpeg|mp3/.test(mime) ? 'mp3' : 'webm';
@@ -12,7 +13,7 @@ export async function speechToText(env, bytes, mime = 'audio/webm', language) {
       fd.append('response_format', 'json');
       fd.append('temperature', '0');
       if (language) fd.append('language', language);
-      const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${env.GROQ_API_KEY}` }, body: fd });
+      const r = await groqFetch(env, 'stt', (key) => fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: fd }));
       const d = await r.json().catch(() => ({}));
       if (r.ok && typeof d.text === 'string') return d.text.trim();
       errors.push('groq: ' + (d?.error?.message || r.status));
@@ -50,11 +51,14 @@ function wavFromPcm(pcm, rate = 24000) {
 }
 
 // Real Hindi voices. Both are optional and free to start: add SARVAM_API_KEY (sarvam.ai, free credits) and/or GEMINI_API_KEY (aistudio.google.com, free tier).
-async function hindiSpeech(env, text, girl, errors, mp3Only) {
+// Her voice follows her mood: slower and softer when sleepy or sad, brighter when happy. (The browser voice does the same in voice.js.)
+const MOOD_PACE = { sleepy: 0.82, sleeping: 0.82, sad: 0.88, in_pain: 0.85, clingy: 0.92, flirty: 0.95, sulky: 0.95, moody: 0.97, happy: 1.05, sassy: 1.05, jealous: 1.05, angry: 1.1, hyper: 1.18 };
+const CHEERFUL = new Set(['happy', 'hyper', 'flirty', 'sassy']);
+async function hindiSpeech(env, text, girl, errors, mp3Only, mood) {
   if (env.SARVAM_API_KEY) {
     try {
       const speaker = (girl ? env.SARVAM_GIRL : env.SARVAM_BOY) || (girl ? 'priya' : 'aditya');
-      const base = { text: text.slice(0, 1500), speaker, model: env.SARVAM_MODEL || 'bulbul:v3', pace: 1.0, output_audio_codec: 'mp3', speech_sample_rate: 24000 };
+      const base = { text: text.slice(0, 1500), speaker, model: env.SARVAM_MODEL || 'bulbul:v3', pace: MOOD_PACE[mood] || 1.0, output_audio_codec: 'mp3', speech_sample_rate: 24000 };
       for (const field of ['language_code', 'target_language_code']) {
         const r = await fetch(env.SARVAM_TTS_URL || 'https://api.sarvam.ai/text-to-speech', { method: 'POST', headers: { 'Content-Type': 'application/json', 'api-subscription-key': env.SARVAM_API_KEY }, body: JSON.stringify({ ...base, [field]: 'hi-IN' }) });
         const d = await r.json().catch(() => ({}));
@@ -103,20 +107,20 @@ export async function textToSpeech(env, text, opts = {}) {
   const girl = opts.gender !== 'boy';
   const errors = [];
   if (looksHindi(text, opts.language)) {
-    const h = await hindiSpeech(env, text, girl, errors, !!opts.mp3);
+    const h = await hindiSpeech(env, text, girl, errors, !!opts.mp3, opts.mood);
     if (h) return h;
   }
   if (!canSpeakOnServer(text)) throw Object.assign(new Error('Hindi uses the browser voice until a Hindi voice key is added.'), { status: 422 });
 
-  if (env.GROQ_API_KEY && !opts.mp3) {
+  if (hasGroq(env) && !opts.mp3) {
     try {
       const pool = girl ? GIRL_VOICES : BOY_VOICES;
       const voice = pool.includes(opts.voice) ? opts.voice : pool[0];
-      const style = girl ? '[cheerful] ' : '';
-      const r = await fetch((env.GROQ_TTS_URL || 'https://api.groq.com/openai/v1/audio/speech'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.GROQ_API_KEY}` },
+      const style = girl && (!opts.mood || CHEERFUL.has(opts.mood)) ? '[cheerful] ' : '';       // no cheerful voice when she is sad, angry or sleepy
+      const r = await groqFetch(env, 'tts', (key) => fetch((env.GROQ_TTS_URL || 'https://api.groq.com/openai/v1/audio/speech'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({ model: env.TTS_GROQ_MODEL || 'canopylabs/orpheus-v1-english', input: style + text, voice, response_format: 'wav' }),
-      });
+      }));
       if (r.ok) { const bytes = new Uint8Array(await r.arrayBuffer()); if (bytes.length > 500) return { bytes, mime: 'audio/wav', ext: 'wav', engine: 'orpheus' }; }
       else errors.push('orpheus ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120));
     } catch (e) { errors.push('orpheus: ' + (e && e.message)); }

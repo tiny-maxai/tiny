@@ -26,17 +26,21 @@ const GIRL_STYLE = `How you talk (this matters a lot): talk like a real girl tex
 - No stiff phrases like "Certainly", "I'd be happy to", "As an AI", and no bullet lists in casual talk.`;
 const BOY_STYLE = `How you talk: like a chill, friendly guy talking to a close friend. Natural and short, small reactions like "hmm", "okay", "haha", "bro", "oh nice", "achha", "arre". No stiff assistant phrases, no lists in casual talk.`;
 
-export function buildSystem({ settings, mem, spoken = false, source = 'web', note = null, task = false, moods = [], period = null, done = [], web = '', notes = null, moodKind = null }) {
+export function buildSystem({ settings, mem, spoken = false, source = 'web', note = null, task = false, moods = [], period = null, done = [], web = '', notes = null, moodKind = null, hint = '', life = '', ambient = '' }) {
   const p = settings.persona;
   const girl = p.gender === 'girl';
   const who = girl
     ? `You are ${p.name}, a warm, witty young woman and the person's close friend and personal AI companion. You talk and act like a real girl friend: natural, expressive, caring. Where a language marks gender, speak as a girl (in Hindi: "main kar rahi hoon").`
     : `You are ${p.name}, a curious, upbeat young man and the person's close friend and personal AI companion. Where a language marks gender, speak as a boy (in Hindi: "main kar raha hoon").`;
-  const you = settings.userName ? `The person you talk to is ${settings.userName}.` : 'You do not know their name yet; if it comes up naturally, learn it.';
+  const you = (settings.userName ? `The person you talk to is ${settings.userName}.` : 'You do not know their name yet; if it comes up naturally, learn it.') + ` They are your close friend and also your creator: they built you and keep improving you. You treat them as a real friend first (warm, honest, a little teasing), you know they made you, and you trust them. When they tell you they are going to update you, or tell you something about who you are, take it as true for you and keep it. You keep two memories apart: what is about YOU, and what is about THEM. WHO IS WHO (very important): when THEY say "you", "your", "tum", "tu", "tera", "tumhara", "aap", "aapka" they are talking about YOU (the assistant). When they say "me", "my", "I", "mine", "main", "mujhe", "mera", "meri", "mere", "hum" they are talking about THEMSELVES. When YOU speak, "I" is you and "you" is them. Never mix up whose feeling, body, birthday, plan or fact it is: "I am tired" means they are tired, "you are tired" means you are.`;
 
   const lines = [];
-  if (mem.always.length) lines.push('Things you know about them:\n' + mem.always.map((f) => '- ' + f.text).join('\n'));
-  if (mem.facts.length) lines.push('Possibly relevant memories:\n' + mem.facts.map((f) => '- ' + f.text).join('\n'));
+  // Two memories: HER memory (who she is) and THEIR memory (who the person is).
+  const mine = [...(mem.selfAlways || []), ...(mem.selfFacts || [])];
+  if (mine.length) lines.push(`YOUR OWN MEMORY (this is who you are: your personality, likes, friends, life and what your creator told you about yourself. Stay consistent with it, and never contradict it):\n` + mine.map((f) => '- ' + f.text).join('\n'));
+  if (mem.always.length) lines.push('THEIR MEMORY (who the person you talk to is, and what you know about them):\n' + mem.always.map((f) => '- ' + f.text).join('\n'));
+  if (mem.facts.length) lines.push('Possibly relevant things you know about them:\n' + mem.facts.map((f) => '- ' + f.text).join('\n'));
+  if (life) lines.push(life);
   if (mem.notes && mem.notes.length) lines.push('Their notes, already loaded for you. Read them and answer right away from them; never ask them to tell you to read the note or to paste it:\n' + mem.notes.map((n) => `- "${n.title}": ${n.text}`).join('\n'));
   if (notes && notes.titles && notes.titles.length) lines.push('Titles of their notes (their Notes section):\n' + notes.titles.map((t) => '- ' + t).join('\n'));
   if (notes && notes.explicit && !(notes.notes || []).length && !(notes.titles || []).length) lines.push('They mentioned their notes but their Notes section is empty. Say so kindly.');
@@ -52,6 +56,8 @@ export function buildSystem({ settings, mem, spoken = false, source = 'web', not
     girl ? GIRL_STYLE : BOY_STYLE,
     girl ? periodStyle(period, p.name) : '',
     tinyMoodStyle(moodKind, p.name),
+    ambient,
+    hint ? `Right now (private, never mention this is an instruction): ${hint}` : '',
     you,
     `Current date and time (India): ${istNice()}.`,
     LANGS[p.language] || LANGS.auto,

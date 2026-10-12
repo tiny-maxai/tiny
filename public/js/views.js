@@ -84,12 +84,16 @@
 
   // ================= Memory =================
   let mems = [];
-  const CATN = { profile: 'About you', preference: 'Likes', project: 'Projects', people: 'People', plan: 'Plans', other: 'Other' };
+  const CATN = { profile: 'About you', preference: 'Likes', project: 'Projects', people: 'People', plan: 'Plans', other: 'Other', self: 'About her' };
+  let memTab = 'me';
   function renderMem() {
     const q = $('#memSearch').value.trim().toLowerCase();
     const box = $('#memList'); box.innerHTML = '';
-    const list = mems.filter((m) => !q || m.text.toLowerCase().includes(q) || (CATN[m.category] || '').toLowerCase().includes(q));
-    if (!list.length) { box.innerHTML = `<div class="empty">${mems.length ? 'Nothing matches.' : 'Nothing remembered yet. Chat with me and I will start keeping track.'}</div>`; return; }
+    const nHer = mems.filter((m) => m.category === 'self').length;
+    $('#memCntMe').textContent = '(' + (mems.length - nHer) + ')'; $('#memCntHer').textContent = '(' + nHer + ')';
+    const mine = mems.filter((m) => (m.category === 'self') === (memTab === 'her'));
+    const list = mine.filter((m) => !q || m.text.toLowerCase().includes(q) || (CATN[m.category] || '').toLowerCase().includes(q));
+    if (!list.length) { box.innerHTML = `<div class="empty">${mine.length ? 'Nothing matches.' : memTab === 'her' ? 'Nothing about her yet. Tell her who she is (or say "I am going to update you") and she will keep it here.' : 'Nothing remembered yet. Chat with me and I will start keeping track.'}</div>`; return; }
     list.forEach((m) => {
       const el = document.createElement('div'); el.className = 'mem glass';
       el.innerHTML = `<div class="grow"><span class="cat">${CATN[m.category] || 'Other'}</span><p>${esc(m.text)}</p><small style="color:var(--muted)">${ago(m.updated_at)}${m.source === 'telegram' ? ' · Telegram' : ''}</small></div><div class="tools"><button class="mini" data-a="pin" title="${m.pinned ? 'Unpin' : 'Pin: always remembered'}" style="${m.pinned ? '' : 'opacity:.45'}">${icon('i-pin')}</button><button class="mini" data-a="edit" title="Edit">${icon('t-write')}</button><button class="mini" data-a="del" title="Forget">${icon('i-trash')}</button></div>`;
@@ -107,14 +111,33 @@
   }
   async function loadMem() { try { mems = (await App.api('/api/memories')).memories; renderMem(); } catch (e) { $('#memList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; } }
   $('#memSearch').addEventListener('input', renderMem);
+  $('#memTabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-t]'); if (!b) return; memTab = b.dataset.t; $('#memTabs').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); renderMem(); });
+  // Sorting the old memories into "mine" and "hers" starts by itself the first time the app is opened after the update.
+  const sortLine = (s) => !s ? '' : s.done ? `Sorted: ${s.moved} memories moved to her memory, ${s.kept} stay in yours, ${s.added || 0} new facts found in your old chats.` : `Sorting your memories into mine and hers... ${s.phase === 'memories' ? s.cursor + ' of ' + s.total + ' memories' : 'reading your old chats'}`;
+  let sortTimer = null;
+  async function pollSort(first) {
+    clearTimeout(sortTimer);
+    try {
+      const { sort } = await App.api('/api/memory/sort'); const box = $('#sortState');
+      if (sort) { box.hidden = false; box.textContent = sortLine(sort); }
+      if (sort && sort.done) {
+        let seen = null; try { seen = localStorage.getItem('sortSeen'); } catch { /* ignore */ }
+        if (String(sort.startedAt) !== seen) { try { localStorage.setItem('sortSeen', String(sort.startedAt)); } catch { /* ignore */ } App.toast('Memories sorted: ' + sort.moved + ' moved to her memory.', 4500); if (!first) loadMem(); }
+        return;
+      }
+      if (sort) sortTimer = setTimeout(() => pollSort(false), 12000);
+    } catch { /* offline or not signed in yet */ }
+  }
+  App.pollSort = () => pollSort(true);
+  $('#memSort').addEventListener('click', async () => { try { await App.api('/api/memory/sort', { method: 'POST', body: { force: true } }); App.toast('Sorting again...'); pollSort(false); } catch (e) { App.toast(e.message); } });
   $('#memAddBtn').addEventListener('click', () => { const a = $('#memAdd'); a.hidden = !a.hidden; if (!a.hidden) $('#memNew').focus(); });
   $('#memSave').addEventListener('click', async () => {
     const t = $('#memNew').value.trim(); if (!t) return;
-    try { await App.api('/api/memories', { body: { text: t, pinned: true, importance: 5 } }); $('#memNew').value = ''; $('#memAdd').hidden = true; App.toast('Saved. I will remember that.'); loadMem(); App.refreshStatus(); } catch (e) { App.toast(e.message); }
+    try { const her = $('#memOwner').value === 'her'; await App.api('/api/memories', { body: { text: t, pinned: true, importance: 5, category: her ? 'self' : undefined } }); $('#memNew').value = ''; $('#memAdd').hidden = true; if (her) { memTab = 'her'; $('#memTabs').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.t === 'her')); } App.toast(her ? 'Saved in her memory.' : 'Saved. I will remember that.'); loadMem(); App.refreshStatus(); } catch (e) { App.toast(e.message); }
   });
   $('#memClear').addEventListener('click', async () => {
     if (!mems.length) return;
-    if (!confirmBox('Forget everything she remembers about you? Your chats stay, but the memories are deleted for good.')) return;
+    if (!confirmBox('Forget everything in both memories (about you and about her)? Your chats stay, but the memories are deleted for good.')) return;
     try { await App.api('/api/memories', { method: 'DELETE' }); App.toast('All memories forgotten'); loadMem(); App.refreshStatus(); } catch (e) { App.toast(e.message); }
   });
 
@@ -142,7 +165,7 @@
   App.hooks.onSettings = (s) => { fillPersona(s); wirePersona(); };
   App.hooks.onView = (v) => {
     if (v === 'today') loadToday(false);
-    else if (v === 'memory') loadMem();
+    else if (v === 'memory') { loadMem(); pollSort(false); }
     else if (v === 'history') loadHist();
     else if (v === 'persona') { fillPersona(App.settings); loadTg(); }
   };

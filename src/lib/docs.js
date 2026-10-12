@@ -2,6 +2,7 @@
 import { htmlToText } from './web.js';
 import { clip } from './util.js';
 import { isImage, readImage } from './ocr.js';
+import { docxToText, xlsxToText } from './office.js';
 
 const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|xml|js|ts|py|c|cpp|java|css|log|yaml|yml|ini|sql)$/i;
 export const MAX_DOC_CHARS = 16000;
@@ -66,10 +67,13 @@ export async function docText(env, bytes, name = 'file', mime = '') {
   const ext = (/\.([a-z0-9]+)$/i.exec(name) || [])[1] || '';
   let kind, text;
   if (/pdf/i.test(mime) || ext.toLowerCase() === 'pdf' || (bytes.length > 4 && latin(bytes.subarray(0, 5)) === '%PDF-')) { kind = 'PDF'; text = await pdfText(env, bytes, name); }
+  else if (ext.toLowerCase() === 'docx' || /wordprocessingml/i.test(mime)) { kind = 'Word'; text = await docxToText(bytes); }
+  else if (ext.toLowerCase() === 'xlsx' || /spreadsheetml/i.test(mime)) { kind = 'Excel'; text = await xlsxToText(bytes); }
+  else if (/^(doc|xls|ppt)$/i.test(ext)) throw Object.assign(new Error('That is an old Word/Excel format. Please save it as .docx or .xlsx and send again.'), { status: 415 });
   else if (isImage(name, mime)) { kind = 'picture'; text = await readImage(env, bytes, name, mime); }
   else if (/html?/i.test(ext) || /html/i.test(mime)) { kind = 'HTML'; text = htmlToText(new TextDecoder().decode(bytes)); }
   else if (TEXT_EXT.test(name) || /^text\//i.test(mime) || /json|xml/i.test(mime)) { kind = 'text'; text = new TextDecoder().decode(bytes); }
-  else throw Object.assign(new Error('I can read pictures, PDF, HTML and text files (txt, md, csv, json, code). That one is another type.'), { status: 415 });
+  else throw Object.assign(new Error('I can read pictures, PDF, Word, Excel, HTML and text files (txt, md, csv, json, code). That one is another type.'), { status: 415 });
   text = String(text || '').replace(/\u0000/g, '').trim();
   if (text.length < 5) throw Object.assign(new Error(kind === 'PDF' ? 'I could not find any text in that PDF. It may be scanned pictures, which I cannot read.' : 'That file looks empty.'), { status: 422 });
   return { kind, text: clip(text, 60000) };

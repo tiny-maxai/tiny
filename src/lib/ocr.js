@@ -1,12 +1,13 @@
 // Reads pictures (OCR): text in photos, screenshots, notes, question papers, plus a short description when there is no text.
 // Uses a Groq vision model (free tier, same key), with Workers AI as backup. Images are never stored.
 import { bytesToB64, clip } from './util.js';
+import { groqFetch, hasGroq } from './groq.js';
 
 export const IMAGE_MAX = 4 * 1024 * 1024;
 const DEFAULT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const PROMPT = `You are an OCR reader for a personal assistant. Look at the image.
 1. Copy ALL visible text exactly as written (Hindi in Devanagari, English, numbers, formulas), keeping the order and line breaks. For tables write rows with " | " between cells. For handwriting, do your best and put [unclear] where you cannot read.
-2. If there is little or no text (a photo, diagram, chart, screenshot of an app), describe what you see in 2 to 4 short lines, and read any labels.
+2. If there is little or no text (a photo, diagram, chart, screenshot of an app), describe what you see in 2 to 4 short lines, and read any labels. If the image is a question with a figure, graph, circuit or geometry diagram, also describe the figure precisely (shapes, labels, values, angles, connections) so someone could solve it without seeing it.
 Output the text first, then, only if useful, a line starting with "Picture:" describing it. No other commentary.`;
 
 export const isImage = (name = '', mime = '') => /^image\//i.test(mime) || /\.(jpe?g|png|webp|gif|bmp)$/i.test(name);
@@ -15,16 +16,16 @@ const mimeOf = (name, mime) => (/^image\/(jpeg|png|webp|gif)/i.test(mime) ? mime
 export async function readImage(env, bytes, name = 'image.jpg', mime = '') {
   if (bytes.length > IMAGE_MAX) throw Object.assign(new Error('That picture is too big (limit about 4 MB). Send a smaller one or a screenshot.'), { status: 413 });
   const type = mimeOf(name, mime);
-  if (env.GROQ_API_KEY) {
+  if (hasGroq(env)) {
     const url = env.GROQ_CHAT_URL || DEFAULT_URL;
     const models = String(env.GROQ_MODELS_VISION || 'meta-llama/llama-4-scout-17b-16e-instruct').split(',').map((x) => x.trim()).filter(Boolean);
     const dataUrl = `data:${type};base64,${bytesToB64(bytes)}`;
     for (const model of models) {
       try {
-        const res = await fetch(url, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.GROQ_API_KEY}` }, signal: AbortSignal.timeout(28000),
+        const res = await groqFetch(env, model, (key) => fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(28000),
           body: JSON.stringify({ model, temperature: 0.1, max_tokens: 1800, messages: [{ role: 'system', content: PROMPT }, { role: 'user', content: [{ type: 'text', text: 'Read this image.' }, { type: 'image_url', image_url: { url: dataUrl } }] }] }),
-        });
+        }));
         const d = await res.json().catch(() => ({}));
         const t = d && d.choices && d.choices[0] && d.choices[0].message && String(d.choices[0].message.content || '').trim();
         if (res.ok && t) return t;
