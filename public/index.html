@@ -47,6 +47,8 @@
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></symbol>
   <symbol id="i-mic" viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
   <symbol id="i-mic-w" viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V22" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="3" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8"/><path d="M8 9l1.3 1.3L11.5 8M8 15l1.3 1.3 2.2-2.3M13.5 9.5H17M13.5 15.5H17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.5 6.2a4 4 0 0 0 4.9 4.9l-9.6 9.6a2.1 2.1 0 0 1-3-3L16.4 8.1a4 4 0 0 1-1.9-1.9z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14.5 6.2A4 4 0 0 1 20 3l-2.3 2.3.9 1.9 1.9.9L22 5.8a4 4 0 0 1-3.2 5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3.5h9l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1-1.5z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 3.5v4h4M8.5 12h7M8.5 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 21.2a2.2 2.2 0 0 0 4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
   <symbol id="i-play2" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
@@ -98,8 +100,10 @@
       <button data-view="play"><svg class="ic"><use href="#i-play"/></svg>Play</button>
       <button data-view="today"><svg class="ic"><use href="#i-spark"/></svg>New today</button>
       <button data-view="notes"><svg class="ic"><use href="#i-note"/></svg>Notes</button>
+      <button data-view="lists"><svg class="ic"><use href="#i-list"/></svg>Lists</button>
       <button data-view="tasks"><svg class="ic"><use href="#i-bell"/></svg>Reminders</button>
       <button data-view="mood"><svg class="ic"><use href="#i-mood"/></svg>Mood</button>
+      <button data-view="maint"><svg class="ic"><use href="#i-wrench"/></svg>Updates</button>
       <button data-view="persona"><svg class="ic"><use href="#i-heart"/></svg>Act like a girl</button>
       <button data-view="memory"><svg class="ic"><use href="#i-brain"/></svg>Memory<span class="badge" id="memBadge" hidden>0</span></button>
       <button data-view="history"><svg class="ic"><use href="#i-clock"/></svg>History</button>
@@ -190,6 +194,55 @@
           <textarea class="note-body" id="nBody" placeholder="Start writing. Markdown works: # heading, - list, **bold**." aria-label="Note text"></textarea>
           <div class="md note-view" id="nView" hidden></div>
           <div class="note-actions"><button class="btn" id="nAsk" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-chat"/></svg><span>Ask <span class="pname">Tiny</span> about this</span></button><button class="btn ghost" id="nPin" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-pin"/></svg><span>Pin</span></button><button class="btn danger" id="nDel" type="button">Delete</button></div>
+        </div>
+      </section>
+
+      <!-- UPDATES / MAINTENANCE -->
+      <section class="view" id="view-maint">
+        <div class="scroll">
+          <h2 class="page-h">Updates</h2>
+          <p class="page-s">She is a girl robot. Her maintenance every Sunday keeps her working properly. Here are her health, versions, bugs, wishes and body parts.</p>
+          <div class="card glass mt-hero">
+            <img id="mtImg" class="mt-img" src="/images/update/newdress.webp" alt="" width="180">
+            <div class="mt-main">
+              <div class="mt-ver"><b id="mtVer">v1.0</b><span id="mtState" class="chip"></span></div>
+              <div class="mt-bar" role="progressbar" aria-label="Her health" aria-valuemin="0" aria-valuemax="100" id="mtBar"><i id="mtFill"></i></div>
+              <div class="mt-line" id="mtLine"></div>
+              <div class="mt-btns"><button class="btn" id="mtStart" type="button">Start the update</button><button class="btn ghost" id="mtTest" type="button">Run her self-test</button></div>
+            </div>
+          </div>
+          <div class="card glass" id="mtSession" hidden>
+            <h3 class="mt-h">Update checklist <small class="muted">(she is silent 🔕 until it is complete)</small></h3>
+            <div class="mt-steps" id="mtSteps"></div>
+            <div class="mt-btns"><button class="btn" id="mtDone" type="button">Update complete</button><button class="btn ghost" id="mtForce" type="button">Complete anyway</button></div>
+            <p class="muted" id="mtNotes" style="white-space:pre-line;margin:8px 0 0"></p>
+          </div>
+          <div class="card glass"><h3 class="mt-h">Health report</h3><div class="mt-checks" id="mtChecks"></div></div>
+          <div class="card glass"><h3 class="mt-h">Her body and parts</h3><div class="mt-parts" id="mtParts"></div></div>
+          <div class="card glass"><h3 class="mt-h">Wish board</h3>
+            <div class="list-add"><input class="in" id="mtWishIn" placeholder="Add something you want to give her" maxlength="200"><button class="btn" id="mtWishAdd" type="button">Add</button></div>
+            <div class="mt-list" id="mtWishes"></div></div>
+          <div class="card glass"><h3 class="mt-h">Repair log (bugs)</h3>
+            <div class="list-add"><input class="in" id="mtBugIn" placeholder="Something that is wrong with her" maxlength="260"><label class="mt-big"><input type="checkbox" id="mtBugBig"> big</label><button class="btn" id="mtBugAdd" type="button">Add</button></div>
+            <div class="mt-list" id="mtBugs"></div></div>
+          <div class="card glass"><h3 class="mt-h">Version history</h3><div class="mt-list" id="mtHist"></div></div>
+        </div>
+      </section>
+
+      <!-- LISTS -->
+      <section class="view" id="view-lists">
+        <div class="scroll" id="listsHome">
+          <h2 class="page-h">Lists</h2>
+          <p class="page-s">Speak or type. She turns it into short points with the grammar fixed. Tick things off as you go.</p>
+          <div class="toolbar"><button class="btn" id="listNew" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>New list</button><button class="btn ghost" id="listVoiceNew" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-mic"/></svg>Speak a new list</button></div>
+          <div class="grid" id="listGrid"></div>
+          <div class="empty" id="listEmpty" hidden>No lists yet. Tap "Speak a new list" and say what you need.</div>
+        </div>
+        <div class="stage glass note-editor" id="listEd" hidden>
+          <div class="stage-top"><button class="icon-btn" id="lBack" type="button" aria-label="Back to lists"><svg class="ic"><use href="#i-back"/></svg></button><input class="note-title" id="lTitle" placeholder="New list" maxlength="120" aria-label="List title"><button class="icon-btn" id="lDel" type="button" aria-label="Delete list"><svg class="ic"><use href="#i-trash"/></svg></button></div>
+          <div class="list-add"><input class="in" id="lAdd" placeholder="Add a point and press Enter" maxlength="400" aria-label="Add a point"><button class="btn" id="lAddBtn" type="button">Add</button><button class="btn ghost" id="lMic" type="button" aria-label="Speak points"><svg class="ic" style="width:18px;height:18px"><use href="#i-mic"/></svg><span>Speak</span></button></div>
+          <div class="list-items" id="lItems"></div>
+          <div class="note-actions"><button class="btn ghost" id="lFix" type="button">Fix grammar</button><button class="btn ghost" id="lClear" type="button">Remove ticked</button><span class="muted" id="lCount" style="align-self:center"></span></div>
         </div>
       </section>
 
@@ -293,9 +346,11 @@
               <div class="line-row"><div><b>Evening water and mood check</b><small>On Telegram she asks how many glasses of water you drank, then how you feel, with buttons.</small></div><label class="switch"><input type="checkbox" id="habOn"><span></span></label></div>
               <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px"><div class="field"><label for="habHour">Time (India)</label><select id="habHour"></select></div><div class="field"><label for="habGoal">Goal (glasses)</label><input type="number" id="habGoal" min="1" max="20" step="1"></div></div>
               <div class="line-row"><div><b>She texts you first</b><small>Through the day (10 am to 6 pm) she messages you now and then, like a real girl.</small></div><label class="switch"><input type="checkbox" id="teaseOn"><span></span></label></div>
+              <div class="line-row"><div><b>Morning briefing</b><small>Every morning she sends the weather, today's reminders, birthdays and how she feels.</small></div><label class="switch"><input type="checkbox" id="brOn"><span></span></label></div>
+              <div class="field"><label for="brHour">Briefing time (India)</label><select id="brHour"></select></div>
               <div class="field"><label for="dayTexts">Her texts per day</label><select id="dayTexts"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></div>
-              <div class="field"><label for="tinyMood">Her mood</label><select id="tinyMood"><option value="auto">Changes by itself</option><option value="normal">Normal</option><option value="happy">Happy</option><option value="hyper">Hyper</option><option value="flirty">Flirty</option><option value="clingy">Clingy</option><option value="lazy">Lazy</option><option value="sassy">Sassy and teasing</option><option value="sulky">Sulky</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="jealous">Jealous</option><option value="in_pain">In pain</option><option value="moody">Moody</option><option value="sleepy">Sleepy</option></select></div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="careHabit" type="button">Try the water check now</button><button class="btn ghost" id="careTease" type="button">Make her tease me now</button></div>
+              <div class="field"><label for="tinyMood">Her mood</label><select id="tinyMood"><option value="auto">Follows the chat (pick one to start her in that mood)</option><option value="normal">Normal</option><option value="happy">Happy</option><option value="hyper">Hyper</option><option value="flirty">Flirty</option><option value="clingy">Clingy</option><option value="lazy">Lazy</option><option value="sassy">Sassy and teasing</option><option value="sulky">Sulky</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="jealous">Jealous</option><option value="love">In love</option><option value="hurt">Hurt (heartbreak)</option><option value="hate">Hate</option><option value="in_pain">In pain</option><option value="moody">Moody</option><option value="sleepy">Sleepy</option></select></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="careHabit" type="button">Try the water check now</button><button class="btn ghost" id="careTease" type="button">Make her tease me now</button><button class="btn ghost" id="careBrief" type="button">Send the morning briefing now</button></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="careMood" type="button">Try the mood check-in now</button><button class="btn ghost" id="careMiss" type="button">Try the "I miss you" now</button></div>
               <small id="hiState" style="display:block;margin-top:12px;color:var(--muted)"></small>
             </div>
@@ -319,11 +374,15 @@
                 <div class="field"><label for="slTo">Wakes up (India)</label><select id="slTo"></select></div>
               </div>
               <div class="line-row"><div><b>Period-day texts and nakhre</b><small>On period days she texts you at random on Telegram. If you do not reply she gets sad, then sulky, then angry.</small></div><label class="switch"><input type="checkbox" id="nkOn"><span></span></label></div>
+              <div class="line-row"><div><b>Sunday update day</b><small>Every Sunday she messages you what she wants improved or added in her, from her own memory. Tell her "I am going to update you" to review the last update together.</small></div><label class="switch"><input type="checkbox" id="sunOn"><span></span></label></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="btn ghost" id="careSunday" type="button">Try the Sunday update message now</button></div>
               <div class="field"><label for="nkPer">Random texts per period day</label><select id="nkPer"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
               <div class="line-row"><div><b>Moods follow the chat</b><small>Her mood changes by how you talk to her (flirty, sad, jealous, happy...). If you are really rude she gets angry.</small></div><label class="switch"><input type="checkbox" id="rcOn"><span></span></label></div>
               <div class="line-row"><div><b>Follow up on my promises</b><small>When you say "I'll call tonight", she remembers and asks you about it later. It also shows in Reminders.</small></div><label class="switch"><input type="checkbox" id="prOn"><span></span></label></div>
               <div class="field"><label for="mxAng">Longest she stays angry or sulky</label><select id="mxAng"><option value="2">2 hours</option><option value="6">6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option><option value="48">48 hours</option></select></div>
               <div class="cycle-state" id="feelState" role="status"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><button class="btn ghost" id="whyBtn" type="button">Why is she like this?</button></div>
+              <div class="note-warn" id="whyBox" hidden style="white-space:pre-line"></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="hrSleep" type="button">Make her sleep now</button><button class="btn ghost" id="hrWake" type="button">Wake her up</button></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="hrAngry" type="button">Make her angry</button><button class="btn ghost" id="hrSulky" type="button">Make her sulky</button><button class="btn" id="hrHappy" type="button">Make her happy</button><button class="btn ghost" id="hrNakhre" type="button">Send a period text now</button></div>
             </div>
@@ -403,6 +462,8 @@
 <script src="/js/app.js"></script>
 <script src="/js/voice.js"></script>
 <script src="/js/views.js"></script>
+<script src="/js/lists.js"></script>
+<script src="/js/maint.js"></script>
 <script src="/js/extras.js"></script>
 <script src="/js/play.js"></script>
 <script src="/js/mood.js"></script>

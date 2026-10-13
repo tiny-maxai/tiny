@@ -489,7 +489,8 @@ svg.ic { color:var(--primary); }
 /* ---------- her mood chip in the header (next to the period day) ---------- */
 .mood-chip { gap:6px; color:var(--ink); }
 .mood-chip .mc-e { font-size:16px; line-height:1; }
-.mood-chip[data-k="angry"] { color:#C62828; }
+.mood-chip[data-k="angry"], .mood-chip[data-k="hate"] { color:#C62828; }
+.mood-chip[data-k="love"] { color:#C2185B; } .mood-chip[data-k="hurt"] { color:#37609E; }
 .mood-chip[data-k="sad"], .mood-chip[data-k="sulky"] { color:#37609E; }
 .mood-chip[data-k="in_pain"], .mood-chip[data-k="moody"], .mood-chip[data-k="jealous"] { color:#B3412F; }
 .mood-chip[data-k="flirty"], .mood-chip[data-k="clingy"] { color:#C2185B; }
@@ -513,3 +514,39 @@ svg.ic { color:var(--primary); }
 .voice-ov .v-char { width:min(220px,24vh); }
 .voice-ov .v-text:empty, .voice-ov .v-you:empty { display:none; }
 .voice-ov .v-actions { margin-top:8px; }
+
+/* lists */
+.list-add { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.list-add .in { flex:1; min-width:160px; }
+.list-items { display:flex; flex-direction:column; gap:8px; }
+.l-row { display:flex; align-items:center; gap:10px; border:1px solid var(--line); background:var(--surface); border-radius:14px; padding:10px 12px; }
+.l-row input[type=checkbox] { width:20px; height:20px; accent-color:var(--primary); flex:none; }
+.l-row .l-t { flex:1; min-width:0; border:none; background:transparent; font-size:15px; outline:none; padding:2px 0; }
+.l-row.done .l-t { text-decoration:line-through; color:var(--muted); }
+.l-row .l-x { flex:none; border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:20px; line-height:1; padding:2px 6px; }
+.btn.rec { background:#C62828; color:#fff; }
+.note-card .l-prog { height:6px; border-radius:6px; background:var(--primary-soft); overflow:hidden; margin-top:auto; } .note-card .l-prog i { display:block; height:100%; background:var(--primary); }
+
+/* updates and maintenance */
+#view-maint .card { margin:0 4px 14px; }
+.mt-hero { display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+.mt-img { height:210px; width:auto; max-width:46%; object-fit:contain; filter:drop-shadow(0 8px 14px rgba(87,58,252,.18)); }
+.mt-main { flex:1; min-width:220px; display:flex; flex-direction:column; gap:10px; }
+.mt-ver { display:flex; align-items:center; gap:10px; } .mt-ver b { font-size:26px; letter-spacing:-.02em; }
+.mt-bar { height:14px; border-radius:14px; background:var(--primary-soft); overflow:hidden; } .mt-bar i { display:block; height:100%; width:0; background:var(--primary); transition:width .5s; border-radius:14px; }
+.mt-bar[data-s="tired"] i { background:#F59E0B; } .mt-bar[data-s="needs fixing"] i { background:#C62828; }
+.mt-line { color:var(--body); font-size:14px; line-height:1.5; }
+.mt-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.mt-h { margin:0 0 10px; font-size:17px; }
+.mt-steps, .mt-checks, .mt-list, .mt-parts { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.mt-step, .mt-check, .mt-item, .mt-part { display:flex; align-items:center; gap:10px; border:1px solid var(--line); background:var(--surface); border-radius:14px; padding:10px 12px; font-size:14px; }
+.mt-step input { width:20px; height:20px; accent-color:var(--primary); }
+.mt-check .dot { width:10px; height:10px; border-radius:50%; flex:none; background:var(--primary); } .mt-check[data-s="tired"] .dot { background:#F59E0B; } .mt-check[data-s="needs fixing"] .dot { background:#C62828; }
+.mt-check small, .mt-item small { color:var(--muted); display:block; }
+.mt-check > div, .mt-item > div, .mt-part > div { flex:1; min-width:0; }
+.mt-lv { display:flex; gap:3px; } .mt-lv i { width:9px; height:14px; border-radius:3px; background:var(--primary-soft); } .mt-lv i.on { background:var(--primary); }
+.mt-item.done > div b, .mt-item.fixed > div b { text-decoration:line-through; color:var(--muted); font-weight:500; }
+.mt-item .mini-btn, .mt-part .mini-btn { border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:5px 10px; font-size:12.5px; cursor:pointer; }
+.mt-big { display:flex; align-items:center; gap:5px; font-size:13px; }
+.tag { display:inline-block; font-size:11.5px; padding:2px 8px; border-radius:20px; background:var(--primary-soft); color:var(--ink); margin-left:6px; }
+.tag.red { background:#FDE8E8; color:#C62828; }

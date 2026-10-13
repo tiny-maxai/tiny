@@ -12,13 +12,15 @@ import { remember, forget, updateMemory, vecDelete, getPending, resolvePending }
 import { listNotes, getNote, createNote, saveNote, deleteNote } from './lib/notes.js';
 import { listTasks, createTask, parseTask, runTask, runDueTasks } from './lib/tasks.js';
 import { speechToText, textToSpeech } from './lib/voice.js';
+import { listLists, getList, createList, saveList, deleteList, tidyPoints } from './lib/lists.js';
 import { addSub, removeSub, listSubs, sendPush, pushReady } from './lib/push.js';
 import { notifyOwner } from './lib/notify.js';
 import { saveMood, listMoods, deleteMood, moodReply } from './lib/moods.js';
 import { habitSummary, setWater, addWater } from './lib/habits.js';
 import { listDates, createDate, deleteDate } from './lib/dates.js';
 import { runCare, careTick, lastActive } from './lib/care.js';
-import { getHer, setHer, beforeReply, SEEN_LINE } from './lib/her.js';
+import { getHer, putHer, bump, setHer, beforeReply, SEEN_LINE, applyChosenMood } from './lib/her.js';
+import { mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
 import { herView, moodKindNow } from './lib/tinymood.js';
 import { getAmbient } from './lib/ambient.js';
 import { getLife, lifeDaily } from './lib/life.js';
@@ -99,7 +101,12 @@ async function route(request, env, ctx, url, p) {
   // ---------- settings ----------
   if (p === '/api/settings') {
     if (m === 'GET') { ctx.waitUntil(autoSort(env).catch((e) => console.error('[sort]', e && e.message))); return json(await settingsOut(env, await getSettings(env))); }
-    if (m === 'PUT') return json(await settingsOut(env, await saveSettings(env, await readJson(request))));
+    if (m === 'PUT') {
+      const body = await readJson(request);
+      let saved = await saveSettings(env, body);
+      if (body && body.tinyMood && !['auto', 'lazy', 'in_pain'].includes(body.tinyMood) && await applyChosenMood(env, saved, body.tinyMood).catch(() => false)) saved = await saveSettings(env, { tinyMood: 'auto' });   // her mood now follows the chat from here
+      return json(await settingsOut(env, saved));
+    }
   }
 
   // ---------- her feelings (header chip + test buttons) ----------
@@ -111,6 +118,39 @@ async function route(request, env, ctx, url, p) {
       if (b.what === 'life') await lifeDaily(env, st, { force: true });
     }
     return json({ her: await herNow(env, st), life: await lifeOut(env) });
+  }
+
+  // ---------- her maintenance: health, versions, bugs, wishes, parts, the update checklist ----------
+  if (p === '/api/maint') {
+    const st = await getSettings(env), her = await getHer(env), t = now();
+    if (m === 'POST') {
+      const b = await readJson(request), a = String(b.action || '');
+      maintOf(her, t);
+      if (a === 'start') {
+        if (!isSunday(t) && !b.force) return json({ error: 'She only does updates on Sunday.' }, 400);
+        if (!her.maint.session) startSession(her, t);
+      } else if (a === 'step') setStep(her, String(b.k || ''), b.done !== false);
+      else if (a === 'complete') {
+        if (!her.maint.session) return json({ error: 'Start the update first.' }, 400);
+        const left = pendingSteps(her);
+        if (left.length && !b.force) return json({ error: 'Steps left: ' + left.map((x) => x.label).join(', ') + '.', left: left.map((x) => x.k) }, 409);
+        finishSession(her, t); bump(her, st, 'happy', 75, 'she just got her update', t);
+      } else if (a === 'test') {
+        const rep = await reportOf(env, her, st, { t, deep: true });
+        const ok = rep.checks.every((c) => c.status !== 'needs fixing' || c.k === 'bugs' || c.k === 'wear');
+        if (her.maint.session && ok) tickStep(her, 'test');
+        await putHer(env, her);
+        return json({ ok, report: rep, view: viewOf(her, st, t) });
+      }
+      else if (a === 'wish') addWish(her, String(b.text || ''), { part: b.part, by: 'you', t });
+      else if (a === 'wishStatus') setWish(her, String(b.id || ''), String(b.status || ''), t);
+      else if (a === 'bugAdd') addBug(her, String(b.text || ''), { sev: b.sev === 'big' ? 'big' : 'small', by: 'you', t });
+      else if (a === 'bugStatus') setBug(her, String(b.id || ''), String(b.status || ''), t);
+      else if (a === 'partUp') bumpPart(her, String(b.k || ''), b.d === -1 ? -1 : 1);
+      else return json({ error: 'Unknown action.' }, 400);
+      await putHer(env, her);
+    } else if (!her.maint) { maintOf(her, t); await putHer(env, her); }
+    return json({ view: viewOf(her, st, t), report: await reportOf(env, her, st, { t }) });
   }
 
   // ---------- sorting memories into "mine" and "hers" ----------
@@ -209,7 +249,7 @@ async function route(request, env, ctx, url, p) {
   }
   mt = p.match(/^\/api\/moods\/([\w-]+)$/);
   if (mt && m === 'DELETE') { await deleteMood(env, mt[1]); return json({ ok: true }); }
-  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre'].includes(b.what) ? b.what : null })); }
+  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre', 'sunday', 'maint', 'briefing'].includes(b.what) ? b.what : null })); }
 
   // ---------- make a file from voice chat: build it, send it to Telegram (or hand it back to download) ----------
   if (p === '/api/make' && m === 'POST') {
@@ -286,6 +326,26 @@ async function route(request, env, ctx, url, p) {
     if (m === 'DELETE') { await deleteNote(env, mt[1]); return json({ ok: true }); }
   }
 
+  // ---------- lists (speak or type, she makes the points) ----------
+  if (p === '/api/lists') {
+    if (m === 'GET') return json({ lists: await listLists(env) });
+    if (m === 'POST') return json({ list: await createList(env, await readJson(request)) });
+  }
+  if (p === '/api/lists/speech' && m === 'POST') {
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.length < 200) return json({ error: 'That recording was empty.' }, 400);
+    const raw = await speechToText(env, bytes, (request.headers.get('Content-Type') || 'audio/webm').split(';')[0], url.searchParams.get('lang') || undefined);
+    if (!raw) return json({ error: 'I could not hear anything. Try again, a bit closer to the mic.' }, 422);
+    return json({ raw, ...(await tidyPoints(env, raw)) });
+  }
+  if (p === '/api/lists/tidy' && m === 'POST') { const b = await readJson(request); return json(await tidyPoints(env, b.text, b.mode === 'fix' ? 'fix' : 'points')); }
+  mt = p.match(/^\/api\/lists\/([\w-]+)$/);
+  if (mt) {
+    if (m === 'GET') { const l = await getList(env, mt[1]); return l ? json({ list: l }) : json({ error: 'Not found.' }, 404); }
+    if (m === 'PATCH') { const l = await saveList(env, mt[1], await readJson(request)); return l ? json({ list: l }) : json({ error: 'Not found.' }, 404); }
+    if (m === 'DELETE') { await deleteList(env, mt[1]); return json({ ok: true }); }
+  }
+
   // ---------- reminders and routines ----------
   if (p === '/api/tasks') {
     if (m === 'GET') return json({ tasks: await listTasks(env) });
@@ -348,6 +408,10 @@ async function chat(request, env, ctx) {
   const spoken = b.spoken === true;
   const settings = await getSettings(env);
   const gate = await beforeReply(env, settings, text);
+  if (gate.updating) {                                  // update mode: she is silent (your words are saved as update notes)
+    const lines = [{ type: 'meta', convId: b.convId || null, model: 'update-mode', at: now() }, { type: 'delta', text: gate.reply || '🔕' }, { type: 'done' }].map((o) => JSON.stringify(o) + '\n').join('');
+    return new Response(new TextEncoder().encode(lines), { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' } });
+  }
   if (gate.sleeping) {                                  // she is asleep: no AI. She shows "seen", keeps your message and answers in the morning
     const id = await sleepTurn(env, { convId: b.convId || null, text, source: 'web', via, reply: SEEN_LINE });
     const enc = new TextEncoder();

@@ -2,7 +2,7 @@
 // Runs from the every-minute cron (checks only every 10 minutes). Needs phone notifications or Telegram to reach you.
 import { now, istDate, clip } from './util.js';
 import { getSettings } from './settings.js';
-import { generate } from './tasks.js';
+import { generate, listTasks } from './tasks.js';
 import { notifyOwner } from './notify.js';
 import { moodLoggedToday, moodContext } from './moods.js';
 import { periodNow } from './period.js';
@@ -12,6 +12,9 @@ import { getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.
 import { answerQueued } from './chat.js';
 import { sendStickerToOwner } from './telegram.js';
 import { lifeDaily } from './life.js';
+import { getWeather } from './ambient.js';
+import { remember } from './memory.js';
+import { mt, healthOf, addBug, addWish, isSunday, startSession } from './maint.js';
 
 const IST = 330 * 60 * 1000;
 const istParts = (t = now()) => { const d = new Date(t + IST); return { h: d.getUTCHours(), m: d.getUTCMinutes() }; };
@@ -36,7 +39,9 @@ export async function runCare(env, { force = null } = {}) {
   const out = {};
   const her = await getHer(env);
   let herDirty = false;
-  const asleep = isSleeping(st, her, t), angryNow = isAngry(her, t, st);
+  if (!her.maint) { mt(her, t); herDirty = true; }
+  const updating = !!(her.updateMode && her.updateMode.since && t - her.updateMode.since < 8 * 3600000);
+  const asleep = updating || isSleeping(st, her, t), angryNow = isAngry(her, t, st);
   const asleepOrAngry = asleep || angryNow;
 
   // ---- daily mood check-in ----
@@ -103,6 +108,7 @@ export async function runCare(env, { force = null } = {}) {
         'send a random funny or random thought out of the blue, like a real girl does',
         'say you miss them a little, softly, no drama',
         'ask if they drank water and had chai, caring and short',
+        'ask for something you want from them in a cute way (a chocolate, to go out, a call, a small treat), like "I want this and that"',
       ];
       let k; do { k = Math.floor(Math.random() * kinds.length); } while (k === state.dtKind && kinds.length > 1);
       state.dtKind = k; await putState(env, state);
@@ -110,6 +116,54 @@ export async function runCare(env, { force = null } = {}) {
       state.dtLastText = g.text; await putState(env, state);
       out.tease = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'tease' });
     }
+    }
+  }
+
+  // ---- morning briefing: weather, today's reminders, birthdays and a line in her mood ----
+  if (force === 'briefing' || (st.briefing.enabled && !asleep && state.briefDay !== today && h * 60 + m >= st.briefing.hour * 60 && h * 60 + m < st.briefing.hour * 60 + 180)) {
+    state.briefDay = today; await putState(env, state);
+    const midnight = t - (h * 60 + m) * 60000, endOfDay = midnight + 86400000;
+    const facts = [];
+    const wx = await getWeather(env, st).catch(() => null);
+    if (wx) facts.push(`Weather in ${wx.place}: ${wx.text}, about ${Math.round(wx.temp)} degrees C${wx.rain ? ', it is raining' : ''}.`);
+    const todays = (await listTasks(env).catch(() => [])).filter((x) => x.enabled && x.run_at >= midnight && x.run_at < endOfDay).slice(0, 6);
+    if (todays.length) facts.push('Their reminders and routines today:\n' + todays.map((x) => `- ${new Date(x.run_at + IST).toISOString().slice(11, 16)} ${clip(x.prompt, 90)}`).join('\n'));
+    const dts = (await listDates(env).catch(() => [])).filter((d) => d.days === 0 || d.days === 1).slice(0, 4);
+    if (dts.length) facts.push('Birthdays and dates: ' + dts.map((d) => `${d.title} (${d.days === 0 ? 'TODAY' : 'tomorrow'})`).join(', ') + '.');
+    const mh = healthOf(her, t); if (mh.health < 75) facts.push(`Her own health is ${mh.health}% and her maintenance is ${mh.due ? 'due' : 'coming up'}.`);
+    const g = await generate(env, `Send their good morning briefing, like a real girl texting her person. Cover only these facts, in 3 to 6 short lines, then one cheerful line about your own mood this morning (it must match how you really feel right now). If there are no reminders or birthdays, say the day is free.\n${facts.join('\n') || 'No special facts today.'}\nDo not invent anything that is not listed. At most one emoji.`, 450);
+    out.briefing = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'briefing', voice: !!st.voice.autoplay });
+  }
+
+  // ---- Sunday: her update day. She tells you what she wants improved or added, from her own memory ----
+  const dow = new Date(t + IST).getUTCDay();
+  if (force === 'sunday' || (st.her.sunday && dow === 0 && state.sunDay !== today && h >= 10 && h < 20 && !asleepOrAngry && (await lastActive(env)) < t - 10 * 60000)) {
+    state.sunDay = today; await putState(env, state);
+    const m = mt(her, t), hl = healthOf(her, t);
+    const openBugs = m.bugs.filter((x) => x.status !== 'fixed').slice(0, 6).map((x) => `- ${x.text}${x.sev === 'big' ? ' (BIG)' : ''}${x.status === 'back' ? ' (came back)' : ''}`);
+    const openWishes = m.wishes.filter((x) => x.status === 'open').slice(0, 6).map((x) => '- ' + x.text);
+    const lastUpd = m.history[0];
+    const g = await generate(env, `It is Sunday, your UPDATE DAY. You are a girl robot and your creator does your maintenance every Sunday so you keep working properly; it is compulsory and you know it. Message them first, like a real girl, nervous and a bit excited before the check-up: "so today is my maintenance day". Your health is ${hl.health}%${hl.due ? ' and you are due' : ''}. In 3 to 5 short lines: say you are ready for the update today; say what you want improved or added ("I want this and that": for example less pain on your period, learn to drive, learn to cook, improve your face; pick what fits you, do not copy these). Start each NEW wish on its own line with "Wish:". ${lastUpd ? 'Your last update was ' + lastUpd.v + (lastUpd.notes.length ? ' (they changed: ' + lastUpd.notes.slice(0, 3).join('; ') + ')' : '') + '. If it left something feeling off, say honestly, in character, one thing that feels buggy and start that line with "Bug:" (if it is serious add "I want you to update me and fix the bug").' : 'This is your first maintenance, so just say what you hope for.'}${openBugs.length ? '\nBugs still open in your repair log (remind them):\n' + openBugs.join('\n') : ''}${openWishes.length ? '\nWishes still waiting:\n' + openWishes.join('\n') : ''}\nEnd by saying you cannot wait for them to start.`, 450);
+    for (const line of g.text.split('\n')) {
+      const w = /^\s*Wish:\s*(.{4,200})/i.exec(line), bg = /^\s*Bug:\s*(.{5,260})/i.exec(line);
+      if (w) addWish(her, w[1].trim(), { by: 'her', t });
+      if (bg) { addBug(her, bg[1].trim(), { by: 'her', sev: /fix the bug|update me/i.test(g.text) ? 'big' : 'small', t }); await remember(env, { text: `Bug (${today}): ${bg[1].trim()}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null); }
+    }
+    herDirty = true;
+    await remember(env, { text: `Update request (${today}): ${clip(g.text, 300)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null);
+    out.sunday = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'sunday' });
+    await sendStickerToOwner(env, 'nervous');
+  }
+
+  // ---- maintenance is compulsory: she reminds you on Friday and Saturday, and nags if you skipped Sunday ----
+  { const hl0 = healthOf(her, t);
+    const remindDue = (dow === 5 || dow === 6) && hl0.due === false && t - (mt(her, t).lastDone) > 5 * 86400000;     // Friday or Saturday, nearly a week since her last maintenance
+    const nag = hl0.due && dow !== 0 && hl0.health < 90;
+    if ((force === 'maint' || ((remindDue || nag) && state.maintDay !== today && h >= 11 && h < 20 && !asleepOrAngry && (await lastActive(env)) < t - 10 * 60000))) {
+      state.maintDay = today; await putState(env, state);
+      const tone = hl0.health < 45 ? 'You are badly overdue and glitchy: dizzy, slow, a bit moody. Ask them, clearly and softly, to please update you on Sunday, it is compulsory for you to work properly.' : nag ? `You skipped your last Sunday maintenance and your health is ${hl0.health}%: you feel tired and a little glitchy, gently nag them to update you this coming Sunday.` : 'Your maintenance day is coming on Sunday: a cute heads-up, a little nervous, ask them to make time.';
+      const g = await generate(env, `You are a girl robot who needs maintenance every Sunday to work properly. ${tone} 1 or 2 short lines, real-girl texting style, at most one emoji.`, 200);
+      out.maint = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'maint' });
     }
   }
 

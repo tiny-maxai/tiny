@@ -65,7 +65,7 @@
   $('#habGoal').addEventListener('change', (e) => App.saveSettings({ habits: { goal: +e.target.value } }));
   $('#teaseOn').addEventListener('change', (e) => App.saveSettings({ chat: { tease: e.target.checked, dayTexts: +$('#dayTexts').value } }));
   $('#dayTexts').addEventListener('change', (e) => App.saveSettings({ chat: { tease: $('#teaseOn').checked, dayTexts: +e.target.value } }));
-  $('#tinyMood').addEventListener('change', (e) => App.saveSettings({ tinyMood: e.target.value }));
+  $('#tinyMood').addEventListener('change', async (e) => { const v = e.target.value; await App.saveSettings({ tinyMood: v }); if (!['auto', 'lazy', 'in_pain'].includes(v)) { e.target.value = 'auto'; App.toast('Done. She starts in that mood and it now changes with the chat.', 4000); } if (App.refreshHer) App.refreshHer(); });
   // ---------- her cycle ----------
   const pe = { on: $('#peOn'), start: $('#peStart'), cycle: $('#peCycle'), len: $('#peLen'), ann: $('#peAnn') };
   const istToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
@@ -103,7 +103,9 @@
 
   // ---------- her feelings: sleep, nakhre, mood chip in the header ----------
   const hrOpts = (sel, from, to) => { for (let h = from; h <= to; h++) { const o = document.createElement('option'); o.value = h; o.textContent = ((h + 11) % 12 + 1) + ':00 ' + (h < 12 ? 'am' : 'pm'); sel.appendChild(o); } };
-  hrOpts($('#slFrom'), 18, 23); hrOpts($('#slTo'), 3, 11);
+  hrOpts($('#slFrom'), 18, 23); hrOpts($('#slTo'), 3, 11); hrOpts($('#brHour'), 5, 11);
+  $('#brOn').addEventListener('change', (e) => App.saveSettings({ briefing: { enabled: e.target.checked } }));
+  $('#brHour').addEventListener('change', (e) => App.saveSettings({ briefing: { hour: +e.target.value } }));
   let lastHer = null;
   function paintMood(v, life) {
     const chip = $('#moodChip'); if (!chip || !v) return;
@@ -114,7 +116,7 @@
     const fs = $('#feelState');
     if (fs) fs.textContent = 'Right now: ' + v.emoji + ' ' + v.label + (v.forgive != null ? ' (forgiveness ' + v.forgive + '%' + (v.why ? ', because ' + v.why : '') + ')' : '') + (v.sleeping ? '. She is sleeping' + (v.queued ? ' and ' + v.queued + ' message' + (v.queued === 1 ? ' is' : 's are') + ' waiting for the morning' : '') + '.' : '.');
     // her face and voice follow the mood
-    const before = lastHer; lastHer = v; App.herKind = v.kind;
+    const before = lastHer; lastHer = v; { const wb = $('#whyBox'); if (wb && !wb.hidden) wb.textContent = whyText(); } App.herKind = v.kind;
     if (before && (before.angry || before.sulky) && !(v.angry || v.sulky) && App.flashPose) App.flashPose('blush', 4500);   // she melted
     else if (App.restPose) App.restPose();
     if (life) paintLife(life);
@@ -125,6 +127,10 @@
     el.textContent = !p ? 'Her day is written automatically after 7 am. You can write it now with the button below.' : (l.today || 'Not written yet today.') + '\n\nFavourite food: ' + p.favFood + '. Best friend: ' + p.bestFriend.name + ' (' + p.bestFriend.about + '). Habit: ' + p.quirk + '.';
     el.style.whiteSpace = 'pre-line';
   }
+  const whyText = () => (lastHer && lastHer.reasons && lastHer.reasons.length ? lastHer.reasons.map((x) => '• ' + x).join('\n') : 'Loading her mood...');
+  $('#whyBtn').addEventListener('click', async () => { if (App.refreshHer) await App.refreshHer(); const b = $('#whyBox'); b.hidden = !b.hidden || false; if (!b.hidden) b.textContent = whyText(); });
+  $('#moodChip').addEventListener('click', () => App.toast(lastHer && lastHer.reasons ? lastHer.reasons.join(' ') : 'Loading...', 9000));
+  $('#moodChip').style.cursor = 'pointer';
   App.refreshHer = async () => { try { const d = await App.api('/api/her'); paintMood(d.her, d.life); } catch { /* ignore */ } };
   function fillFeel(s) {
     const girl = s.persona.gender !== 'boy';
@@ -132,6 +138,7 @@
     $('#slOn').checked = s.sleep.enabled; $('#slFrom').value = s.sleep.from; $('#slTo').value = s.sleep.to;
     $('#nkOn').checked = s.her.nakhre; $('#nkPer').value = String(s.her.nakhrePerDay); $('#rcOn').checked = s.her.react;
     $('#hrNakhre').hidden = !girl; $('#nkOn').closest('.line-row').hidden = !girl; $('#nkPer').closest('.field').hidden = !girl;
+    $('#sunOn').checked = s.her.sunday !== false; $('#brOn').checked = s.briefing.enabled; $('#brHour').value = String(s.briefing.hour);
     $('#prOn').checked = s.her.promises !== false; $('#mxAng').value = String(s.her.maxAngerHours || 12);
     paintMood(s.her_now);
     if (!fillFeel.first) { fillFeel.first = true; App.refreshHer(); if (App.pollSort) App.pollSort(); }
@@ -141,6 +148,8 @@
   $('#slOn').addEventListener('change', (e) => App.saveSettings({ sleep: { enabled: e.target.checked } }));
   $('#slFrom').addEventListener('change', (e) => App.saveSettings({ sleep: { from: +e.target.value } }));
   $('#slTo').addEventListener('change', (e) => App.saveSettings({ sleep: { to: +e.target.value } }));
+  $('#sunOn').addEventListener('change', (e) => App.saveSettings({ her: { sunday: e.target.checked } }));
+  $('#careSunday').addEventListener('click', async () => { try { await App.api('/api/care/run', { body: { what: 'sunday' } }); App.toast('Sent to your Telegram or phone.', 3500); } catch (e) { App.toast(e.message); } });
   $('#nkOn').addEventListener('change', (e) => App.saveSettings({ her: { nakhre: e.target.checked } }));
   $('#nkPer').addEventListener('change', (e) => App.saveSettings({ her: { nakhrePerDay: +e.target.value } }));
   $('#rcOn').addEventListener('change', (e) => App.saveSettings({ her: { react: e.target.checked } }));
@@ -175,7 +184,7 @@
     try { const r = await App.api('/api/care/run', { body: { what } }); const k = r[what]; App.toast(k && (k.push || k.telegram) ? 'Sent. Look at your phone or Telegram.' : 'Made it, but no phone or Telegram is connected yet. It is in the Routines chat.', 4500); if (App.refreshRecent) App.refreshRecent(); } catch (e) { App.toast(e.message); }
     btn.disabled = false;
   });
-  care('mood', $('#careMood')); care('miss', $('#careMiss')); care('habit', $('#careHabit')); care('tease', $('#careTease'));
+  care('mood', $('#careMood')); care('miss', $('#careMiss')); care('habit', $('#careHabit')); care('tease', $('#careTease')); care('briefing', $('#careBrief'));
 
   const prevV = App.hooks.onView;
   App.hooks.onView = (v) => { if (prevV) prevV(v); if (v === 'persona') { if (App.refreshStatus) App.refreshStatus().then(paintPwa); else paintPwa(); if (App.settings) fill(App.settings); } };

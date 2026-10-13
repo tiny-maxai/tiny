@@ -2,6 +2,7 @@
 import { chatOnce, finishChat, sleepTurn } from './chat.js';
 import { beforeReply, sleepingLine, getHer } from './her.js';
 import { herView, moodKindNow } from './tinymood.js';
+import { reportOf, viewOf } from './maint.js';
 import { getAmbient } from './ambient.js';
 import { periodNow } from './period.js';
 import { lastActive } from './care.js';
@@ -46,14 +47,13 @@ const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { 
 export async function sendWithButtons(env, chat, text, rows) {
   return api(env, 'sendMessage', { chat_id: chat, text: text.slice(0, 3900), reply_markup: { inline_keyboard: rows.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } });
 }
-async function sendVoice(env, chat, text) {
+export async function sendVoice(env, chat, text) {
   try {
     const st = await getSettings(env);
     const v = await textToSpeech(env, clip(plainForSpeech(text), 900), { mood: await moodKindNow(env, st).catch(() => null), gender: st.persona.gender, language: st.persona.language, mp3: true });
-    const fd = new FormData();
-    fd.append('chat_id', String(chat));
-    fd.append('audio', new Blob([v.bytes], { type: v.mime }), 'reply.' + v.ext);
-    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendAudio`, { method: 'POST', body: fd });
+    const post = (method, field) => { const fd = new FormData(); fd.append('chat_id', String(chat)); fd.append(field, new Blob([v.bytes], { type: v.mime }), 'reply.' + v.ext); return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({})); };
+    const r = await post('sendVoice', 'voice');                       // a real voice-note bubble
+    if (!r || !r.ok) await post('sendAudio', 'audio');                // fallback: audio file
   } catch (e) { console.error('[tg voice]', e && e.message); }
 }
 export async function sendDocument(env, chat, bytes, name, caption, mime = 'text/html') {
@@ -193,7 +193,7 @@ async function processMessage(env, msg) {
   const [cmd, ...restParts] = text.split(/\s+/);
   const rest = restParts.join(' ').trim();
 
-  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /docx /xlsx /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n/mood  how she feels right now\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
+  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /docx /xlsx /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n/mood  how she feels right now\n/health  her maintenance health report\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
   if (/^\/new/i.test(cmd)) { await env.KV.delete(kvKey); await send(env, chat, 'Fresh chat started. I still remember everything about you.'); return; }
   if (/^\/remember/i.test(cmd)) {
     if (!rest) { await send(env, chat, 'Tell me what: /remember I love mango lassi'); return; }
@@ -205,6 +205,12 @@ async function processMessage(env, msg) {
       const d = await getToday(env);
       await send(env, chat, d.greeting + '\n\n' + d.ideas.map((i, n) => `${n + 1}. ${i.title} (${i.minutes} min)\n   ${i.why}`).join('\n\n'));
     } catch (e) { await send(env, chat, e.message); }
+    return;
+  }
+  if (/^\/health\b/i.test(cmd)) {
+    const her = await getHer(env), rep = await reportOf(env, her, settings, { deep: /deep|test/i.test(rest) });
+    const icon = { good: 'OK', tired: 'TIRED', 'needs fixing': 'FIX' };
+    await send(env, chat, `${settings.persona.name}'s health: ${rep.health.health}% (${rep.health.state}) | ${viewOf(her, settings).version}\n${rep.health.due ? (rep.health.overdueDays ? 'Maintenance is overdue.' : 'Maintenance is due today.') : 'Maintenance done for this week.'}\n\n` + rep.checks.map((c) => `${icon[c.status] || c.status}  ${c.name}: ${c.note}`).join('\n') + '\n\n/health test  runs a real thinking test');
     return;
   }
   if (/^\/mood\b/i.test(cmd)) {
@@ -244,6 +250,7 @@ async function processMessage(env, msg) {
   const convId = (await env.KV.get(kvKey)) || null;
   // She sleeps from 11 pm to 7 am and after you say good night: no AI, one short "sleeping" line, then she stays quiet.
   const gate = await beforeReply(env, settings, text);
+  if (gate.updating) { await send(env, chat, gate.reply || '🔕'); return; }   // update mode: silent, your words are saved as update notes
   if (gate.sleeping) {
     const id = await sleepTurn(env, { convId, text, source: 'telegram', via, reply: '' });   // saved and queued: she answers in the morning
     if (!convId) await env.KV.put(kvKey, id);
@@ -259,6 +266,7 @@ async function processMessage(env, msg) {
     const r = await chatOnce(env, { convId, text: chatText, source: 'telegram', via, spoken: wantVoice, gate, brain: solving ? 'solve' : undefined });
     if (!convId) await env.KV.put(kvKey, r.convId);
     if (wantVoice) await send(env, chat, r.reply); else await sendBubbles(env, chat, r.reply, settings.chat.bubbles);
+    if (gate.sticker) await sendSticker(env, chat, gate.sticker).catch(() => false);   // repairing / new dress
     if (wantVoice) await sendVoice(env, chat, r.reply);
     await finishChat(env, { convId: r.convId, userMsgId: r.userMsgId, text: chatText, reply: r.reply, model: r.model, source: 'telegram', settings: r.settings });
   } catch (e) {

@@ -91,3 +91,13 @@ CREATE TABLE IF NOT EXISTS dates (
   kind       TEXT NOT NULL DEFAULT 'birthday',
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS lists (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL DEFAULT 'New list',
+  items      TEXT NOT NULL DEFAULT '[]',        -- JSON: [{ "id": "...", "t": "text", "done": 0 }]
+  pinned     INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lists_updated ON lists(updated_at DESC);

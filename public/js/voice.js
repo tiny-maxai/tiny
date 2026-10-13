@@ -24,7 +24,7 @@
     return out.slice(0, 14);
   }
   // Her voice follows her mood: slower and softer when sleepy or sad, brighter and faster when happy or hyper.
-  const MOOD_VOICE = { sleepy: [0.82, 0.9], sleeping: [0.82, 0.9], sad: [0.88, 0.92], in_pain: [0.85, 0.95], clingy: [0.92, 1.08], flirty: [0.95, 1.12], sulky: [0.95, 0.92], moody: [0.97, 1.0], happy: [1.05, 1.1], sassy: [1.05, 1.05], jealous: [1.05, 0.95], angry: [1.1, 0.88], hyper: [1.18, 1.2], lazy: [0.88, 0.95] };
+  const MOOD_VOICE = { sleepy: [0.82, 0.9], sleeping: [0.82, 0.9], sad: [0.88, 0.92], in_pain: [0.85, 0.95], clingy: [0.92, 1.08], flirty: [0.95, 1.12], sulky: [0.95, 0.92], moody: [0.97, 1.0], happy: [1.05, 1.1], sassy: [1.05, 1.05], jealous: [1.05, 0.95], love: [0.93, 1.1], hurt: [0.86, 0.9], hate: [1.08, 0.85], angry: [1.1, 0.88], hyper: [1.18, 1.2], lazy: [0.88, 0.95] };
   const moodVoice = () => { const m = MOOD_VOICE[App.herKind] || [1, 1]; return { rate: m[0], pitch: m[1] }; };
   let token = 0, curUrl = null;
   function fetchClip(text) {

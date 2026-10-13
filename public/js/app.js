@@ -63,6 +63,8 @@
     play: ['Play', 'Games for two. You and me.'],
     today: ['New today', 'What you could create today.'],
     notes: ['Notes', 'Pages you write, and chats you keep.'],
+    maint: ['Updates', 'Her maintenance, versions and bugs.'],
+    lists: ['Lists', 'Speak it, she makes the points.'],
     tasks: ['Reminders', 'Things I do for you, on time.'],
     mood: ['Mood', 'How are you feeling today?'],
     persona: ['Act like a girl', 'Her name, her vibe, her voice.'],
@@ -118,7 +120,7 @@
   const POSES = ['smile', 'wave', 'hello', 'idea', 'explain', 'cheer', 'sleep', 'excited', 'cry', 'type', 'angry', 'blush', 'flirty', 'pain', 'period'];
   const BYTE_ALIAS = { hello: 'smile', wave: 'explain', excited: 'cheer', sleep: 'smile', angry: 'explain', blush: 'smile', flirty: 'smile', pain: 'cry', period: 'cry' };
   // Her face follows her mood (the header chip shows the same mood).
-  const MOOD_POSE = { angry: 'angry', sulky: 'angry', jealous: 'angry', sad: 'cry', in_pain: 'pain', moody: 'period', flirty: 'flirty', clingy: 'blush', happy: 'cheer', hyper: 'excited', sleepy: 'sleep', sleeping: 'sleep', lazy: 'sleep' };
+  const MOOD_POSE = { angry: 'angry', sulky: 'angry', jealous: 'angry', hate: 'angry', hurt: 'cry', love: 'blush', sad: 'cry', in_pain: 'pain', moody: 'period', flirty: 'flirty', clingy: 'blush', happy: 'cheer', hyper: 'excited', sleepy: 'sleep', sleeping: 'sleep', lazy: 'sleep' };
   const moodPose = () => (App.herKind && App.herKind !== 'normal' ? MOOD_POSE[App.herKind] || null : null);
   const isBoy = () => App.settings && App.settings.persona.gender === 'boy';
   const stk = (n) => '/images/stickers/' + (isBoy() ? 'byte-' + (BYTE_ALIAS[n] || n) : 'tiny-' + n) + '.webp';

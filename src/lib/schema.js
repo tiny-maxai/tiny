@@ -16,5 +16,7 @@ export const STATEMENTS = [
   "CREATE INDEX IF NOT EXISTS idx_moods_day ON moods(day)",
   "CREATE INDEX IF NOT EXISTS idx_msg_created ON messages(created_at)",
   "CREATE TABLE IF NOT EXISTS habits ( day TEXT PRIMARY KEY, water INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL )",
-  "CREATE TABLE IF NOT EXISTS dates ( id TEXT PRIMARY KEY, title TEXT NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL, year INTEGER, kind TEXT NOT NULL DEFAULT 'birthday', created_at INTEGER NOT NULL )"
+  "CREATE TABLE IF NOT EXISTS dates ( id TEXT PRIMARY KEY, title TEXT NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL, year INTEGER, kind TEXT NOT NULL DEFAULT 'birthday', created_at INTEGER NOT NULL )",
+  "CREATE TABLE IF NOT EXISTS lists ( id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New list', items TEXT NOT NULL DEFAULT '[]', pinned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL )",
+  "CREATE INDEX IF NOT EXISTS idx_lists_updated ON lists(updated_at DESC)"
 ];

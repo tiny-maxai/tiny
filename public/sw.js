@@ -1,5 +1,5 @@
 // Service worker: makes the site installable, keeps the shell available offline, and shows phone notifications.
-const CACHE = 'tiny-shell-v2';
+const CACHE = 'tiny-shell-v5';
 
 self.addEventListener('install', (e) => { self.skipWaiting(); });
 self.addEventListener('activate', (e) => {

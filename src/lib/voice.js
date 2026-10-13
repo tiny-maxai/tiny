@@ -52,7 +52,7 @@ function wavFromPcm(pcm, rate = 24000) {
 
 // Real Hindi voices. Both are optional and free to start: add SARVAM_API_KEY (sarvam.ai, free credits) and/or GEMINI_API_KEY (aistudio.google.com, free tier).
 // Her voice follows her mood: slower and softer when sleepy or sad, brighter when happy. (The browser voice does the same in voice.js.)
-const MOOD_PACE = { sleepy: 0.82, sleeping: 0.82, sad: 0.88, in_pain: 0.85, clingy: 0.92, flirty: 0.95, sulky: 0.95, moody: 0.97, happy: 1.05, sassy: 1.05, jealous: 1.05, angry: 1.1, hyper: 1.18 };
+const MOOD_PACE = { sleepy: 0.82, sleeping: 0.82, sad: 0.88, in_pain: 0.85, clingy: 0.92, flirty: 0.95, sulky: 0.95, moody: 0.97, happy: 1.05, sassy: 1.05, jealous: 1.05, love: 0.93, hurt: 0.86, hate: 1.08, angry: 1.1, hyper: 1.18 };
 const CHEERFUL = new Set(['happy', 'hyper', 'flirty', 'sassy']);
 async function hindiSpeech(env, text, girl, errors, mp3Only, mood) {
   if (env.SARVAM_API_KEY) {
