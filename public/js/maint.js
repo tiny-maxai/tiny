@@ -22,10 +22,15 @@
     const bar = $('#mtBar'); bar.dataset.s = h.state; bar.setAttribute('aria-valuenow', h.health); $('#mtFill').style.width = h.health + '%';
     const next = new Date(V.nextSunday).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'short' });
     $('#mtLine').textContent = 'Health ' + h.health + '%. ' + (h.updating ? 'She is being repaired right now and stays silent until you finish.' : h.due ? (V.sunday ? 'Her maintenance is due today.' : 'She skipped her Sunday maintenance and is overdue. ') + LINE[h.state] : 'Maintenance done this week. Next one: ' + next + '.');
+    // countdown to the next update; the ring glows on Sunday
+    const cd = $('#mtCount'), dd = V.daysToSunday;
+    cd.classList.toggle('today', !!V.sunday); $('#mtDays').textContent = V.sunday ? '!' : dd;
+    $('#mtCountTxt').textContent = V.forced ? 'Sleeping in her update, back in ' + (V.forced.left >= 60 ? Math.floor(V.forced.left / 60) + ' h ' + (V.forced.left % 60) + ' min' : V.forced.left + ' min') : V.sunday ? (h.updating ? 'Update day, she is being repaired' : 'Update day is today') : 'Next update in ' + dd + ' day' + (dd === 1 ? '' : 's');
+    $('#mtPush').hidden = h.updating; $('#mtPush').disabled = !!V.forceUsed; $('#mtPush').textContent = V.forceUsed ? 'Force update (used this week)' : 'Force update';
     $('#mtStart').hidden = h.updating; $('#mtStart').textContent = V.sunday ? 'Start the update' : 'Start the update (Sunday only)';
     $('#mtStart').disabled = !V.sunday;
     // checklist
-    const ses = V.session; $('#mtSession').hidden = !ses;
+    const ses = V.session; $('#mtSession').hidden = !ses || !!V.forced;
     if (ses) {
       const box = $('#mtSteps'); box.textContent = '';
       ses.steps.forEach((s) => {
@@ -78,7 +83,8 @@
       if (e.notes.length) bits.push('Changed: ' + e.notes.join('; '));
       if (e.bugsFixed.length) bits.push('Bugs fixed: ' + e.bugsFixed.join('; '));
       if (e.wishesDone.length) bits.push('Wishes done: ' + e.wishesDone.join('; '));
-      d.innerHTML = '<div><b>' + esc(e.v) + ' · ' + when(e.at) + '</b><small>' + esc(bits.join('\n') || 'No notes') + '</small></div>';
+      const fb = e.feedback ? '<span class="mt-fb"><span class="mt-stars">' + '★'.repeat(e.feedback.score) + '<i>' + '★'.repeat(5 - e.feedback.score) + '</i></span> ' + e.feedback.score + '/5 · "' + esc(e.feedback.text) + '"</span>' : '';
+      d.innerHTML = '<div><b>' + esc(e.v) + ' · ' + when(e.at) + (e.by === 'forced update' ? ' · forced' : '') + '</b><small>' + esc(bits.join('\n') || 'No notes') + '</small>' + fb + '</div>';
       d.querySelector('small').style.whiteSpace = 'pre-line';
       hb.appendChild(d);
     });
@@ -97,6 +103,44 @@
   $('#mtWishAdd').addEventListener('click', addWish); $('#mtWishIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addWish(); } });
   const addBug = () => { const i = $('#mtBugIn'), v = i.value.trim(); if (!v) return; i.value = ''; call({ action: 'bugAdd', text: v, sev: $('#mtBugBig').checked ? 'big' : 'small' }); $('#mtBugBig').checked = false; };
   $('#mtBugAdd').addEventListener('click', addBug); $('#mtBugIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addBug(); } });
+
+  // ---------- force an update: she argues three times, then goes to sleep for 3 hours ----------
+  const modal = $('#mtModal'), log = $('#mtLog'), wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let forcing = false;
+  const say = (who, text) => { const d = document.createElement('div'); d.className = 'b ' + who; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+  $('#mtPush').addEventListener('click', () => {
+    if (V && V.health.updating) return;
+    log.textContent = ''; forcing = false; $('#mtReason').value = ''; $('#mtReason').disabled = false; $('#mtSend').disabled = false;
+    say('her', 'Why do you want to update me now? 🥲 It is not even Sunday.');
+    modal.hidden = false; setTimeout(() => $('#mtReason').focus(), 50);
+  });
+  const closeModal = () => { modal.hidden = true; forcing = false; };
+  $('#mtCancel').addEventListener('click', () => { if (!forcing) closeModal(); else closeModal(); });
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  async function send() {
+    const reason = $('#mtReason').value.trim(); if (!reason || forcing) return;
+    forcing = true; $('#mtReason').value = ''; $('#mtReason').disabled = true; $('#mtSend').disabled = true;
+    say('me', reason);
+    const said = [];
+    let win = false;
+    try { win = (await App.api('/api/maint', { body: { action: 'forceRoll', reason } })).win; } catch (e) { App.toast(e.message); closeModal(); return; }
+    for (let r = 1; r <= 3; r++) {
+      await wait(900); if (modal.hidden) return;
+      let text = '';
+      try { text = (await App.api('/api/maint', { body: { action: 'argue', reason, round: r, said } })).text; } catch (e) { text = 'But... why today? Can it wait till Sunday?'; }
+      if (modal.hidden) return;
+      said.push(text); say('her', text);
+    }
+    await wait(1200); if (modal.hidden) return;
+    if (win) { say('her', 'Nope. I won this one, no update today. Try again next week.'); await wait(2200); closeModal(); load(); return; }
+    say('her', 'Okay... do it, but little quick, okay? 😮‍💨');
+    await wait(1600); if (modal.hidden) return;
+    const d = await call({ action: 'forceStart', reason });
+    closeModal();
+    if (d) { App.toast('She is going to sleep for 3 hours.', 4000); if (App.refreshHer) App.refreshHer(); }
+  }
+  $('#mtSend').addEventListener('click', send);
+  $('#mtReason').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });
 
   const orig = App.showView;
   App.showView = (v) => { orig(v); if (v === 'maint') load(); };

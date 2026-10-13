@@ -27,17 +27,18 @@ export async function saveList(env, id, b = {}) {
 export const deleteList = (env, id) => env.DB.prepare('DELETE FROM lists WHERE id=?').bind(id).run();
 
 // Spoken or typed text -> short clean points. mode "fix" keeps one point per line and only fixes grammar and spelling.
-export async function tidyPoints(env, text, mode = 'points') {
+export async function tidyPoints(env, text, mode = 'points', lang = '') {
   text = clip(String(text || '').trim(), 6000);
   if (!text) return { title: '', points: [] };
   const rule = mode === 'fix'
     ? 'Each input line is one point. Keep the same lines in the same order. Only fix grammar, spelling, capital letters and punctuation.'
     : 'The text may be spoken (with fillers like "umm", "uh", repeated words, "and then") or typed. Turn it into separate short points: one idea per point, at most about 14 words each. Remove fillers and repeats. Split when several things are mentioned. Do not add anything the person did not say.';
+  const L = { en: 'Write every point in English (translate if needed).', hi: 'Write every point in Hindi, in Devanagari script (हिंदी).', hinglish: 'Write every point in Hinglish: Hindi words in Roman (English) letters, not Devanagari.' }[lang] || '';
   try {
     const r = await complete(env, {
       brain: 'fast', temperature: 0.1, maxTokens: 900, json: true,
       messages: [
-        { role: 'system', content: `You clean up text for a to-do or notes list. ${rule} Fix grammar and spelling. Keep the person's language: English stays English, Hindi in Devanagari stays Devanagari, Hinglish (Hindi in Roman letters) stays Hinglish. Return JSON only: {"title": "a 2 to 4 word title for the list, or empty string", "points": ["...", "..."]}.` },
+        { role: 'system', content: `You clean up text for a to-do or notes list. ${rule} Fix grammar and spelling. ${L || "Keep the person's language: English stays English, Hindi in Devanagari stays Devanagari, Hinglish (Hindi in Roman letters) stays Hinglish."} Return JSON only: {"title": "a 2 to 4 word title for the list, or empty string", "points": ["...", "..."]}.` },
         { role: 'user', content: text },
       ],
     });

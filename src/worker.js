@@ -19,9 +19,11 @@ import { saveMood, listMoods, deleteMood, moodReply } from './lib/moods.js';
 import { habitSummary, setWater, addWater } from './lib/habits.js';
 import { listDates, createDate, deleteDate } from './lib/dates.js';
 import { runCare, careTick, lastActive } from './lib/care.js';
-import { getHer, putHer, bump, setHer, beforeReply, SEEN_LINE, applyChosenMood } from './lib/her.js';
-import { mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
+import { grumpyAfterUpdate, getHer, putHer, bump, setHer, beforeReply, SEEN_LINE, applyChosenMood } from './lib/her.js';
+import { rollForce, forceGo, argueLine, attachFeedback, wakeDue, wakeUp, mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
 import { herView, moodKindNow } from './lib/tinymood.js';
+import { startCharge, batteryView, usePowerBank, powerLine, nightCharge } from './lib/battery.js';
+import { inSleepWindow } from './lib/her.js';
 import { getAmbient } from './lib/ambient.js';
 import { getLife, lifeDaily } from './lib/life.js';
 import { getSortState, startSort, sortStep, sortTick } from './lib/memsort.js';
@@ -34,6 +36,7 @@ const MAX_BODY = 25 * 1024 * 1024; // 25 MB, enough for long voice clips. This i
 
 async function herNow(env, st) {
   const [her, last, ambient] = await Promise.all([getHer(env), lastActive(env).catch(() => 0), getAmbient(env, st).catch(() => null)]);
+  if (nightCharge(her, inSleepWindow(st, now()), now())) await putHer(env, her);
   return herView(st, her, { period: periodNow(st), lastActive: last, ambient });
 }
 async function lifeOut(env) {
@@ -126,7 +129,19 @@ async function route(request, env, ctx, url, p) {
     if (m === 'POST') {
       const b = await readJson(request), a = String(b.action || '');
       maintOf(her, t);
-      if (a === 'start') {
+      if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); await putHer(env, her); }
+      if (a === 'argue') return json({ text: await argueLine(env, st, { reason: String(b.reason || ''), round: b.round, win: !!(her.maint.force && her.maint.force.win), said: Array.isArray(b.said) ? b.said.slice(-3).map((x) => String(x).slice(0, 200)) : [] }) });
+      if (a === 'forceRoll') {
+        if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
+        const f = rollForce(her, String(b.reason || ''), t);
+        if (!f) return json({ error: 'You already used your forced update this week. Next one after Sunday.' }, 400);
+        await putHer(env, her);
+        return json({ win: f.win });
+      }
+      if (a === 'forceStart') {
+        if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
+        if (!forceGo(her, String(b.reason || ''), t)) return json({ error: 'She won this argument, no update today.' }, 400);
+      } else if (a === 'start') {
         if (!isSunday(t) && !b.force) return json({ error: 'She only does updates on Sunday.' }, 400);
         if (!her.maint.session) startSession(her, t);
       } else if (a === 'step') setStep(her, String(b.k || ''), b.done !== false);
@@ -134,7 +149,7 @@ async function route(request, env, ctx, url, p) {
         if (!her.maint.session) return json({ error: 'Start the update first.' }, 400);
         const left = pendingSteps(her);
         if (left.length && !b.force) return json({ error: 'Steps left: ' + left.map((x) => x.label).join(', ') + '.', left: left.map((x) => x.k) }, 409);
-        finishSession(her, t); bump(her, st, 'happy', 75, 'she just got her update', t);
+        { const e = finishSession(her, t); await attachFeedback(env, st, e); } bump(her, st, 'happy', 75, 'she just got her update', t);
       } else if (a === 'test') {
         const rep = await reportOf(env, her, st, { t, deep: true });
         const ok = rep.checks.every((c) => c.status !== 'needs fixing' || c.k === 'bugs' || c.k === 'wear');
@@ -149,8 +164,29 @@ async function route(request, env, ctx, url, p) {
       else if (a === 'partUp') bumpPart(her, String(b.k || ''), b.d === -1 ? -1 : 1);
       else return json({ error: 'Unknown action.' }, 400);
       await putHer(env, her);
-    } else if (!her.maint) { maintOf(her, t); await putHer(env, her); }
+    } else {
+      let dirty = false;
+      if (!her.maint) { maintOf(her, t); dirty = true; }
+      if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); dirty = true; }
+      if (dirty) await putHer(env, her);
+    }
     return json({ view: viewOf(her, st, t), report: await reportOf(env, her, st, { t }) });
+  }
+
+  // ---------- battery ----------
+  if (p === '/api/battery') {
+    const st = await getSettings(env), her = await getHer(env);
+    let note = '', text = '';
+    if (nightCharge(her, inSleepWindow(st, now()), now())) await putHer(env, her);
+    if (m === 'POST') {
+      const b = await readJson(request);
+      if (b.action === 'charge') { note = startCharge(her, st); if (note === 'started') await putHer(env, her); }
+      else if (b.action === 'powerbank') {
+        const was = batteryView(st, her).fainted; note = usePowerBank(her, st);
+        if (note === 'ok') { await putHer(env, her); text = await powerLine(env, st, was); }
+      }
+    }
+    return json({ battery: batteryView(st, her), result: note, text });
   }
 
   // ---------- sorting memories into "mine" and "hers" ----------
@@ -334,11 +370,12 @@ async function route(request, env, ctx, url, p) {
   if (p === '/api/lists/speech' && m === 'POST') {
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (bytes.length < 200) return json({ error: 'That recording was empty.' }, 400);
-    const raw = await speechToText(env, bytes, (request.headers.get('Content-Type') || 'audio/webm').split(';')[0], url.searchParams.get('lang') || undefined);
+    const lang = ['en', 'hi', 'hinglish'].includes(url.searchParams.get('lang')) ? url.searchParams.get('lang') : 'en';
+    const raw = await speechToText(env, bytes, (request.headers.get('Content-Type') || 'audio/webm').split(';')[0], lang === 'en' ? 'en' : 'hi');
     if (!raw) return json({ error: 'I could not hear anything. Try again, a bit closer to the mic.' }, 422);
-    return json({ raw, ...(await tidyPoints(env, raw)) });
+    return json({ raw, ...(await tidyPoints(env, raw, 'points', lang)) });
   }
-  if (p === '/api/lists/tidy' && m === 'POST') { const b = await readJson(request); return json(await tidyPoints(env, b.text, b.mode === 'fix' ? 'fix' : 'points')); }
+  if (p === '/api/lists/tidy' && m === 'POST') { const b = await readJson(request); return json(await tidyPoints(env, b.text, b.mode === 'fix' ? 'fix' : 'points', ['en', 'hi', 'hinglish'].includes(b.lang) ? b.lang : '')); }
   mt = p.match(/^\/api\/lists\/([\w-]+)$/);
   if (mt) {
     if (m === 'GET') { const l = await getList(env, mt[1]); return l ? json({ list: l }) : json({ error: 'Not found.' }, 404); }

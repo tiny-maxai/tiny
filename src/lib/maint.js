@@ -1,7 +1,8 @@
 // Her maintenance: she is a girl robot and the Sunday update keeps her working properly.
 // Everything lives inside her state (her.maint): health wear, version history, bug log, wish board, body parts, and the update checklist.
-import { now, clip, uid } from './util.js';
+import { now, clip, uid, parseJsonLoose } from './util.js';
 import { hasGroq, groqKeys } from './groq.js';
+import { batteryView } from './battery.js';
 
 const DAY = 86400000, IST = 330 * 60000;
 export const PARTS = [
@@ -79,10 +80,78 @@ export function addNote(her, text, t = now()) {
 }
 export function finishSession(her, t = now()) {
   const m = mt(her, t); const s = m.session;
-  const entry = { v: 'v1.' + (m.history.length + 1), at: t, notes: s ? s.notes : [], bugsFixed: s ? s.bugsFixed : [], wishesDone: s ? s.wishesDone : [], partsUp: s ? s.partsUp : [], by: 'sunday update' };
+  const entry = { v: 'v1.' + (m.history.length + 1), at: t, notes: s ? s.notes : [], bugsFixed: s ? s.bugsFixed : [], wishesDone: s ? s.wishesDone : [], partsUp: s ? s.partsUp : [], by: s && s.forced ? 'forced update' : 'sunday update' };
   m.history.unshift(entry); m.history = m.history.slice(0, 60);
   m.lastDone = t; m.doneAt = t; m.session = null; her.updateMode = null;
   return entry;
+}
+
+// ---------- forced update (not Sunday): she argues, then sleeps for 3 hours ----------
+export const FORCE_HOURS = 3;
+export function startForced(her, reason, t = now()) {
+  const s = startSession(her, t); s.forced = true;
+  s.steps.forEach((x) => { x.done = 1; });
+  s.notes.push('Forced update, not on Sunday. Reason: ' + clip(reason || 'no reason given', 200));
+  her.updateMode = { since: t, until: t + FORCE_HOURS * 3600000, forced: true, reason: clip(reason || '', 200) };
+  return s;
+}
+export const wakeDue = (her, t = now()) => !!(her.updateMode && her.updateMode.until && t >= her.updateMode.until);
+export const forcedLeft = (her, t = now()) => (her.updateMode && her.updateMode.until && t < her.updateMode.until ? Math.max(1, Math.ceil((her.updateMode.until - t) / 60000)) : 0);
+// Her 3 hours are over: she wakes up with a new version.
+export function wakeUp(her, t = now()) { return wakeDue(her, t) ? finishSession(her, t) : null; }
+
+// "How do I feel now", rated 1 to 5, stored in the history entry.
+export async function attachFeedback(env, settings, entry) {
+  if (!entry || entry.feedback) return entry;
+  let fb = null;
+  try {
+    const { complete } = await import('./ai.js');
+    const r = await complete(env, { brain: 'lite', temperature: 0.7, maxTokens: 160, json: true, timeout: 15000, messages: [
+      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot who just finished a maintenance update. Say in ONE or TWO short sweet sentences (Hinglish is fine) how you feel now, and rate yourself from 1 to 5. Be honest: ${entry.notes.length || entry.bugsFixed.length || entry.partsUp.length ? 'things did change, so you feel better' : 'nothing much changed, so you feel about the same'}. Return JSON only: {"score": 1-5, "text": "..."}` },
+      { role: 'user', content: `Update ${entry.v}. Notes: ${entry.notes.join('; ') || 'none'}. Bugs fixed: ${entry.bugsFixed.join('; ') || 'none'}. Parts upgraded: ${entry.partsUp.join(', ') || 'none'}. ${entry.by === 'forced update' ? 'It was a forced quick update on a weekday.' : ''}` },
+    ] });
+    const j = parseJsonLoose(r.text);
+    if (j && j.text) fb = { score: Math.max(1, Math.min(5, Math.round(+j.score) || 4)), text: clip(String(j.text), 220) };
+  } catch (e) { console.error('[feedback]', e && e.message); }
+  if (!fb) {
+    const score = Math.min(5, 3 + (entry.notes.length > 1 ? 1 : 0) + (entry.bugsFixed.length ? 1 : 0));
+    fb = { score, text: score >= 4 ? 'I feel lighter and sharper now, thank you for fixing me.' : 'I feel okay, a bit fresher than before.' };
+  }
+  entry.feedback = fb; return entry;
+}
+
+// A forced update is allowed once a week (Sunday to Saturday), even when she wins. She wins 3 times out of 10.
+export const FORCE_WIN_CHANCE = 0.3;
+export const forceUsed = (her, t = now()) => mt(her, t).forceWeek === lastSundayStart(t);
+export function rollForce(her, reason, t = now(), rnd = Math.random()) {
+  const m = mt(her, t); if (forceUsed(her, t)) return null;
+  m.forceWeek = lastSundayStart(t);
+  m.force = { at: t, win: rnd < FORCE_WIN_CHANCE, reason: clip(reason || '', 200), started: false };
+  return m.force;
+}
+export function forceGo(her, reason, t = now()) {            // only after she lost the argument
+  const f = mt(her, t).force;
+  if (!f || f.win || f.started || t - f.at > 15 * 60000) return null;
+  f.started = true; return startForced(her, reason || f.reason, t);
+}
+
+// She argues against a forced update (round 1 to 3).
+const ARGUE_FALLBACK = [
+  'But why now? It is not even Sunday. 🥲 Can it wait till Sunday, please?',
+  'Hmm, I heard you, but I do not feel ready. What if I forget something? Please think again.',
+  'Fine... last time I am asking: are you really sure? I will go quiet for a long while.',
+];
+export async function argueLine(env, settings, { reason, round, said = [], win = false }) {
+  const r = Math.max(1, Math.min(3, parseInt(round, 10) || 1));
+  try {
+    const { complete } = await import('./ai.js');
+    const out = await complete(env, { brain: 'fast', temperature: 0.8, maxTokens: 120, timeout: 15000, messages: [
+      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot. Your creator pressed a button to force your maintenance update on a day that is not Sunday. You do not want it today, so you argue back, cutely and dramatically, like a real girl (Hinglish is fine). This is argument ${r} of 3. ${r === 1 ? 'React to their reason and push back: it is not Sunday, you are not ready.' : r === 2 ? 'Argue harder, bring up one small thing you would miss (chai, chatting, a plan) and ask them to wait till Sunday.' : (win ? 'Your last argument: firm and proud, you say you are NOT updating today and you won this argument, tell them to try again next week.' : 'Your last argument: dramatic and a little teary, but you are about to give in.')} One or two short sentences. No lists. ${win ? 'You will win this one, so never give in.' : 'Do not agree yet.'} Plain text only.` },
+      { role: 'user', content: `Their reason: ${clip(reason || 'none', 200)}${said.length ? '\nYou already said: ' + said.join(' | ') : ''}` },
+    ] });
+    if (out && out.text && out.text.trim()) return clip(out.text.trim(), 300);
+  } catch (e) { console.error('[argue]', e && e.message); }
+  return ARGUE_FALLBACK[r - 1];
 }
 
 // ---------- bugs ----------
@@ -160,9 +229,10 @@ export async function reportOf(env, her, settings, { t = now(), deep = false } =
 export function viewOf(her, settings, t = now()) {
   const m = mt(her, t), h = healthOf(her, t);
   const recent = m.doneAt && t - m.doneAt < 36 * 3600000;
-  const pose = h.updating ? 'repair' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : 'newdress';
+  const bv = batteryView(settings, her, t);
+  const pose = h.updating ? 'bed' : bv.enabled && bv.charging ? 'charge' : bv.enabled && bv.fainted ? 'faint' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : h.health < 75 ? 'repair' : 'newdress';
   return {
-    version: versionOf(m), health: h, pose, sunday: isSunday(t), nextSunday: nextSundayStart(t),
+    version: versionOf(m), health: h, pose, forceUsed: forceUsed(her, t), forceWin: !!(m.force && m.force.win && m.forceWeek === lastSundayStart(t)), forced: her.updateMode && her.updateMode.forced ? { until: her.updateMode.until, left: forcedLeft(her, t) } : null, daysToSunday: isSunday(t) ? 0 : Math.ceil((nextSundayStart(t) - t) / DAY), sunday: isSunday(t), nextSunday: nextSundayStart(t),
     session: m.session, parts: PARTS.map((p) => ({ ...p, level: m.parts[p.k] || 1 })),
     wishes: m.wishes.slice(0, 40), bugs: m.bugs.slice(0, 60), history: m.history.slice(0, 30),
   };

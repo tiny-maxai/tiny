@@ -1,3 +1,4 @@
+import { batteryView } from './battery.js';
 // Her mood right now. One word (happy, sad, angry, flirty, in_pain, sleepy, hyper, sulky, sassy, clingy, jealous, moody)
 // that changes how she talks, and that the website header shows next to the period day.
 import { MOODS, isAngry, isSleeping, moodNow, getHer, lastUserAt } from './her.js';
@@ -65,7 +66,7 @@ export function herView(settings, her, { period = null, lastActive = 0, t = Date
   const kind = sleeping ? 'sleeping' : (tinyMoodNow(settings, { lastActive, t, her, period, ambient }) || 'normal');
   const info = MOODS[kind] || MOODS.normal;
   const cur = moodNow(her, settings, t), soothable = !!cur && ['angry', 'sulky', 'hurt', 'hate'].includes(cur.k);
-  return { kind, label: info.label, emoji: info.emoji, sleeping, angry, sulky: soothable && cur.k !== 'angry', why: soothable ? (cur.reason || '') : '', forgive: soothable ? cur.fg : null, intensity: cur ? Math.round(cur.eff) : 0, queued: sleeping ? ((her.queue && her.queue.length) || 0) : 0, reasons: whyLines(settings, her, kind, cur, { period, ambient, lastActive, t }), updating: !!(her.updateMode && her.updateMode.since) };
+  return { kind, label: info.label, emoji: info.emoji, sleeping, angry, sulky: soothable && cur.k !== 'angry', why: soothable ? (cur.reason || '') : '', forgive: soothable ? cur.fg : null, intensity: cur ? Math.round(cur.eff) : 0, queued: sleeping ? ((her.queue && her.queue.length) || 0) : 0, reasons: whyLines(settings, her, kind, cur, { period, ambient, lastActive, t }), updating: !!(her.updateMode && her.updateMode.since), battery: batteryView(settings, her, t) };
 }
 
 const STYLE = {

@@ -104,6 +104,9 @@
   // ---------- her feelings: sleep, nakhre, mood chip in the header ----------
   const hrOpts = (sel, from, to) => { for (let h = from; h <= to; h++) { const o = document.createElement('option'); o.value = h; o.textContent = ((h + 11) % 12 + 1) + ':00 ' + (h < 12 ? 'am' : 'pm'); sel.appendChild(o); } };
   hrOpts($('#slFrom'), 18, 23); hrOpts($('#slTo'), 3, 11); hrOpts($('#brHour'), 5, 11);
+  $('#battOn').addEventListener('change', (e) => App.saveSettings({ battery: { enabled: e.target.checked } }).then(() => App.refreshHer && App.refreshHer()));
+  $('#battLimit').addEventListener('change', (e) => App.saveSettings({ battery: { limit: +e.target.value } }).then(() => App.refreshHer && App.refreshHer()));
+  $('#battMin').addEventListener('change', (e) => App.saveSettings({ battery: { chargeMinutes: +e.target.value } }));
   $('#brOn').addEventListener('change', (e) => App.saveSettings({ briefing: { enabled: e.target.checked } }));
   $('#brHour').addEventListener('change', (e) => App.saveSettings({ briefing: { hour: +e.target.value } }));
   let lastHer = null;
@@ -119,8 +122,34 @@
     const before = lastHer; lastHer = v; { const wb = $('#whyBox'); if (wb && !wb.hidden) wb.textContent = whyText(); } App.herKind = v.kind;
     if (before && (before.angry || before.sulky) && !(v.angry || v.sulky) && App.flashPose) App.flashPose('blush', 4500);   // she melted
     else if (App.restPose) App.restPose();
+    App.herState = v; paintBatt(before, v);
     if (life) paintLife(life);
   }
+  let battTimer = null;
+  function paintBatt(before, v) {
+    const el = $('#batt'), b = v && v.battery; if (!el) return;
+    clearTimeout(battTimer);
+    if (!b || !b.enabled) { el.hidden = true; return; }
+    el.hidden = false;
+    const pct = b.pct;
+    el.classList.toggle('low', pct <= 20 && !b.charging); el.classList.toggle('mid', pct > 20 && pct <= 50 && !b.charging); el.classList.toggle('charging', b.charging);
+    $('#battFill').setAttribute('width', String(Math.max(0, 23 * pct / 100)));
+    $('#battTxt').textContent = b.charging ? 'Charging ' + b.minsLeft + ' min' : pct + '%';
+    const go = $('#battGo'); go.hidden = b.charging || !(b.fainted || pct <= 40); go.textContent = b.low && !b.fainted ? 'Quick charge ' + b.quickMin + ' min' : 'Charge';
+    const pb = $('#battPb'); pb.hidden = !(b.charging || b.fainted || b.low) || b.pbUsed;
+    el.title = 'Battery: every message you send uses ' + Math.round(100 / b.limit) + '%. At 0% she faints and needs ' + ((App.settings && App.settings.battery && App.settings.battery.chargeMinutes) || 5) + ' min of charging.';
+    if (before && before.battery && before.battery.charging && !b.charging && !b.fainted) { App.toast('Hey, I am fully charged! 🔋', 5000); if (App.flashPose) App.flashPose('cheer', 4000); }
+    if (b.charging) battTimer = setTimeout(() => App.refreshHer && App.refreshHer(), 15000);
+  }
+  document.addEventListener('click', async (e) => {
+    if (e.target.closest('#battPb')) {
+      try { const r = await App.api('/api/battery', { body: { action: 'powerbank' } }); if (r.text) { App.say(r.text); if (App.flashPose) App.flashPose('cheer', 4000); } else App.toast(r.result === 'used' ? 'The power bank was already used today.' : 'Her battery is already full.'); } catch (er) { App.toast(er.message); }
+      if (App.refreshHer) App.refreshHer(); return;
+    }
+    if (!e.target.closest('#battGo')) return;
+    try { const r = await App.api('/api/battery', { body: { action: 'charge' } }); App.toast(r.result === 'started' ? 'Charging. She will say when she is full.' : r.result === 'already' ? 'Already charging.' : 'Not needed yet.'); } catch (er) { App.toast(er.message); }
+    if (App.refreshHer) App.refreshHer();
+  });
   function paintLife(l) {
     const el = $('#lifeText'); if (!el || !l) return;
     const p = l.profile;
@@ -138,7 +167,7 @@
     $('#slOn').checked = s.sleep.enabled; $('#slFrom').value = s.sleep.from; $('#slTo').value = s.sleep.to;
     $('#nkOn').checked = s.her.nakhre; $('#nkPer').value = String(s.her.nakhrePerDay); $('#rcOn').checked = s.her.react;
     $('#hrNakhre').hidden = !girl; $('#nkOn').closest('.line-row').hidden = !girl; $('#nkPer').closest('.field').hidden = !girl;
-    $('#sunOn').checked = s.her.sunday !== false; $('#brOn').checked = s.briefing.enabled; $('#brHour').value = String(s.briefing.hour);
+    $('#sunOn').checked = s.her.sunday !== false; $('#brOn').checked = s.briefing.enabled; { const ba = s.battery || {}; $('#battOn').checked = ba.enabled !== false; $('#battLimit').value = String(ba.limit || 20); $('#battMin').value = String(ba.chargeMinutes || 5); } $('#brHour').value = String(s.briefing.hour);
     $('#prOn').checked = s.her.promises !== false; $('#mxAng').value = String(s.her.maxAngerHours || 12);
     paintMood(s.her_now);
     if (!fillFeel.first) { fillFeel.first = true; App.refreshHer(); if (App.pollSort) App.pollSort(); }

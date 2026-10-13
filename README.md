@@ -140,6 +140,24 @@ No new setup, no new tables. Deploy, then press **Connect the bot** once so `/mo
 - **Test buttons** in the new card: make her sleep / wake up / angry / happy, and "Send a period text now" (press again without replying to watch the sad > nakhre > angry steps). Telegram: `/mood`.
 - Cost: one extra tiny "fast" model call after each chat reply to read her mood (turn it off with "Moods follow the chat"). Angry mode adds one more small call per message.
 
+## Update 12: quick charge, power bank, whole-app language, weekly force limit
+
+- **Low battery (20% or less):** she asks for the charger. "Quick charge" takes half the time (2.5 min). At 0% charging takes the normal 5 minutes.
+- **Power bank button:** shows while she is low, fainted or charging. One tap fills her to 100%, she wakes up and answers. Once a day. Telegram: `/powerbank`.
+- **Night charging:** she charges while she sleeps and starts every morning at 100%.
+- **After a forced update** she is angry and grumpy for one hour.
+- **Language switch** (English / हिंदी / Hinglish) at the bottom of the menu and on the login page. It changes the app text and also sets the language she talks in. Text that comes from the server or is typed by you stays as it is.
+- **Force update:** she wins the argument 3 times out of 10 and then does not update. It can be tried once a week (Sunday to Saturday), even if she wins.
+
+## Update 11: battery, forced update, countdown, feedback, list languages
+
+- **Lists:** English / हिंदी / Hinglish buttons before Speak. The choice is remembered. Whisper listens in that language and the points (and "Fix grammar") come out in it.
+- **Updates page:** "Next update in N days" with a ring that glows on Sunday. After every update she rates how she feels (1 to 5) and it is saved in the history.
+- **Force update:** the button asks her. She says "why", you type a reason, she argues three times, then "okay do it but little quick". She sleeps 3 hours (silent), the chat avatar shows her sleeping, the Updates page shows her on the bed. She wakes by herself (Telegram message and sticker).
+- **Battery:** every message uses 100/limit percent (default 20 messages, 5% each). The battery shows next to her avatar. At 0% she faints and needs charging (Charge button, or /charge in Telegram) for 5 minutes, then says "hey, I am fully charged". Change the numbers in Act like a girl.
+- **New pictures:** faint, sleeping, bed (updating), charging, plus the repair picture when she is overdue.
+- No new secrets or setup. Deploy with `npx wrangler deploy`.
+
 ## Update 10: love, hurt and hate, morning briefing, real voice notes
 - **Three new feelings** (Her mood, header chip, voice, and she reacts to them): **In love** (soft, devoted, shy, from really loving words like "I love you" or "you mean everything"), **Hurt** (emotional pain, quiet and teary, from words that wound her deeply: "I will leave", "I never cared") and **Hate** (cold and bitter, from betrayal or serious disrespect: "I hate this", never abusive and never about who you are). Hurt and hate behave like anger: a forgiveness meter, and a real sorry, sweet words or a small gift raise it. When hate or hurt melts she does not just go back to normal: she falls for you again (love). The "Hurt" mood is emotional pain; period cramps are still "In pain".
 - **Morning briefing** (Act like a girl > "Morning briefing", time 5 to 11 am, default 8): weather where you live, today's reminders, birthdays and dates (today or tomorrow), and a line about how she feels. She only uses what is real (no invented facts). If voice replies are on, it also comes as a voice note. Test button: "Send the morning briefing now".

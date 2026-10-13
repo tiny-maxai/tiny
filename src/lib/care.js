@@ -8,7 +8,9 @@ import { moodLoggedToday, moodContext } from './moods.js';
 import { periodNow } from './period.js';
 import { WATER_BUTTONS, waterLoggedToday } from './habits.js';
 import { listDates, prettyDate } from './dates.js';
-import { getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
+import { wakeDue, wakeUp, attachFeedback } from './maint.js';
+import { finishCharge, nightCharge } from './battery.js';
+import { grumpyAfterUpdate, getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
 import { answerQueued } from './chat.js';
 import { sendStickerToOwner } from './telegram.js';
 import { lifeDaily } from './life.js';
@@ -41,7 +43,8 @@ export async function runCare(env, { force = null } = {}) {
   let herDirty = false;
   if (!her.maint) { mt(her, t); herDirty = true; }
   const updating = !!(her.updateMode && her.updateMode.since && t - her.updateMode.since < 8 * 3600000);
-  const asleep = updating || isSleeping(st, her, t), angryNow = isAngry(her, t, st);
+  const lowBatt = !!(her.batt && (her.batt.chargeUntil || (st.battery && st.battery.enabled !== false && her.batt.used >= (st.battery.limit || 20))));
+  const asleep = updating || lowBatt || isSleeping(st, her, t), angryNow = isAngry(her, t, st);
   const asleepOrAngry = asleep || angryNow;
 
   // ---- daily mood check-in ----
@@ -276,7 +279,30 @@ export async function runCare(env, { force = null } = {}) {
   return out;
 }
 
-export const careTick = (env, scheduledTime) => {
+// Every minute: she wakes from a forced update after 3 hours, and says "I am fully charged" when her charge is done.
+export async function wakeTick(env) {
+  const t = now(), her = await getHer(env);
+  if (her.batt && (her.batt.used > 0 || her.batt.slept || her.batt.chargeUntil)) {
+    const st0 = await getSettings(env);
+    if (nightCharge(her, inSleepWindow(st0, t), t)) await putHer(env, her);
+  }
+  const wake = wakeDue(her, t), bt = her.batt && her.batt.chargeUntil && t >= her.batt.chargeUntil;
+  if (!wake && !bt) return;
+  const st = await getSettings(env), name = (st.persona && st.persona.name) || 'Tiny';
+  if (wake) {
+    const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t);
+    await putHer(env, her);
+    await notifyOwner(env, { title: name, body: `Hey, I am back from my update (${e.v}). I feel ${e.feedback.score}/5: ${e.feedback.text}`, url: '/?go=maint', tag: 'wake' }).catch(() => null);
+    await sendStickerToOwner(env, 'newdress');
+  }
+  if (bt) {
+    finishCharge(her, t); await putHer(env, her);
+    await notifyOwner(env, { title: name, body: 'Hey, I am fully charged! 🔋', url: '/', tag: 'charged' }).catch(() => null);
+    await sendStickerToOwner(env, 'smile');
+  }
+}
+export const careTick = async (env, scheduledTime) => {
+  await wakeTick(env).catch((e) => console.error('[wake]', e && e.message));
   const minute = new Date(scheduledTime || now()).getUTCMinutes();
-  return minute % 10 === 0 ? runCare(env) : Promise.resolve({});
+  return minute % 10 === 0 ? runCare(env) : {};
 };

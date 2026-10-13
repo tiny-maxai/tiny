@@ -110,6 +110,7 @@
     </nav>
     <div class="side-h">Recent chats</div>
     <div class="recent" id="recent"></div>
+    <div class="app-lang seg" role="group" aria-label="App language" data-no-i18n><button type="button" data-lang="en">English</button><button type="button" data-lang="hi">हिंदी</button><button type="button" data-lang="hn">Hinglish</button></div>
     <div class="side-foot"><span class="dot"></span><span id="footStat">Connecting…</span></div>
   </aside>
   <div class="backdrop" id="backdrop"></div>
@@ -131,6 +132,7 @@
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Conversation"></div>
         <div class="composer-wrap">
           <div class="dock">
+            <div class="batt" id="batt" hidden role="status" aria-live="polite"><svg viewBox="0 0 34 18" width="34" height="18" aria-hidden="true"><rect x="1" y="2" width="28" height="14" rx="4.5" fill="none" stroke="#573AFC" stroke-width="2"/><rect x="30.5" y="6" width="3" height="6" rx="1.5" fill="#573AFC"/><rect id="battFill" x="3.5" y="4.5" width="23" height="9" rx="2.5" fill="#60A5FA"/></svg><span id="battTxt">100%</span><button type="button" class="batt-go" id="battGo" hidden>Charge</button><button type="button" class="batt-go pb" id="battPb" hidden>Power bank</button></div>
             <div class="sticker-wrap" id="stickerWrap">
               <div class="fact-bubble" id="factBubble" role="status">
                 <div class="fb-card">
@@ -198,6 +200,14 @@
       </section>
 
       <!-- UPDATES / MAINTENANCE -->
+
+      <div class="mt-modal" id="mtModal" hidden role="dialog" aria-modal="true" aria-label="Force an update">
+        <div class="mt-box glass">
+          <div class="mt-log" id="mtLog" aria-live="polite"></div>
+          <div class="list-add"><input class="in" id="mtReason" placeholder="Tell her why..." maxlength="200" aria-label="Your reason"><button class="btn" id="mtSend" type="button">Send</button></div>
+          <button class="btn ghost" id="mtCancel" type="button" style="margin-top:8px">Never mind</button>
+        </div>
+      </div>
       <section class="view" id="view-maint">
         <div class="scroll">
           <h2 class="page-h">Updates</h2>
@@ -206,9 +216,10 @@
             <img id="mtImg" class="mt-img" src="/images/update/newdress.webp" alt="" width="180">
             <div class="mt-main">
               <div class="mt-ver"><b id="mtVer">v1.0</b><span id="mtState" class="chip"></span></div>
+              <div class="mt-count" id="mtCount"><span class="mt-ring" id="mtRing"><b id="mtDays">0</b></span><span id="mtCountTxt"></span></div>
               <div class="mt-bar" role="progressbar" aria-label="Her health" aria-valuemin="0" aria-valuemax="100" id="mtBar"><i id="mtFill"></i></div>
               <div class="mt-line" id="mtLine"></div>
-              <div class="mt-btns"><button class="btn" id="mtStart" type="button">Start the update</button><button class="btn ghost" id="mtTest" type="button">Run her self-test</button></div>
+              <div class="mt-btns"><button class="btn" id="mtStart" type="button">Start the update</button><button class="btn ghost" id="mtTest" type="button">Run her self-test</button><button class="btn ghost" id="mtPush" type="button">Force update</button></div>
             </div>
           </div>
           <div class="card glass" id="mtSession" hidden>
@@ -234,6 +245,7 @@
         <div class="scroll" id="listsHome">
           <h2 class="page-h">Lists</h2>
           <p class="page-s">Speak or type. She turns it into short points with the grammar fixed. Tick things off as you go.</p>
+          <div class="lang-row"><span class="muted">Speak in</span><div class="seg" id="lLang" role="group" aria-label="Language"><button type="button" data-l="en" class="on">English</button><button type="button" data-l="hi">हिंदी</button><button type="button" data-l="hinglish">Hinglish</button></div></div>
           <div class="toolbar"><button class="btn" id="listNew" type="button"><svg class="ic" style="width:17px;height:17px;color:#fff"><use href="#i-plus"/></svg>New list</button><button class="btn ghost" id="listVoiceNew" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-mic"/></svg>Speak a new list</button></div>
           <div class="grid" id="listGrid"></div>
           <div class="empty" id="listEmpty" hidden>No lists yet. Tap "Speak a new list" and say what you need.</div>
@@ -346,6 +358,9 @@
               <div class="line-row"><div><b>Evening water and mood check</b><small>On Telegram she asks how many glasses of water you drank, then how you feel, with buttons.</small></div><label class="switch"><input type="checkbox" id="habOn"><span></span></label></div>
               <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px"><div class="field"><label for="habHour">Time (India)</label><select id="habHour"></select></div><div class="field"><label for="habGoal">Goal (glasses)</label><input type="number" id="habGoal" min="1" max="20" step="1"></div></div>
               <div class="line-row"><div><b>She texts you first</b><small>Through the day (10 am to 6 pm) she messages you now and then, like a real girl.</small></div><label class="switch"><input type="checkbox" id="teaseOn"><span></span></label></div>
+              <div class="line-row"><div><b>Battery</b><small>Each message you send uses some battery. At 0% she faints and needs a few minutes of charging.</small></div><label class="switch"><input type="checkbox" id="battOn"><span></span></label></div>
+              <div class="line-row"><div><b>Messages per charge</b><small>20 means every message uses 5%.</small></div><select class="in" id="battLimit" style="width:auto"><option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option></select></div>
+              <div class="line-row"><div><b>Charging time</b><small>How long she needs when she faints.</small></div><select class="in" id="battMin" style="width:auto"><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option></select></div>
               <div class="line-row"><div><b>Morning briefing</b><small>Every morning she sends the weather, today's reminders, birthdays and how she feels.</small></div><label class="switch"><input type="checkbox" id="brOn"><span></span></label></div>
               <div class="field"><label for="brHour">Briefing time (India)</label><select id="brHour"></select></div>
               <div class="field"><label for="dayTexts">Her texts per day</label><select id="dayTexts"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></div>
@@ -453,6 +468,7 @@
     <p>This is your private space. Enter your key to come in.</p>
     <div class="field" style="text-align:left"><input type="password" id="loginKey" placeholder="Your access key" autocomplete="current-password" aria-label="Access key"></div>
     <button class="btn" style="width:100%" type="submit">Come in</button>
+    <div class="app-lang seg" role="group" aria-label="Language" data-no-i18n><button type="button" data-lang="en">English</button><button type="button" data-lang="hi">हिंदी</button><button type="button" data-lang="hn">Hinglish</button></div>
     <p class="err" id="loginErr" role="alert"></p>
   </form>
 </div>
@@ -469,6 +485,8 @@
 <script src="/js/mood.js"></script>
 <script src="/js/care.js"></script>
 <script src="/js/handsfree.js"></script>
+<script src="/js/i18n-data.js"></script>
+<script src="/js/i18n.js"></script>
 <script>window.addEventListener("DOMContentLoaded",function(){setTimeout(function(){var l=document.getElementById("loader");if(l)l.classList.add("hide");},200);});setTimeout(function(){var l=document.getElementById("loader");if(l)l.classList.add("hide");},1500);</script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});</script>
 </body>

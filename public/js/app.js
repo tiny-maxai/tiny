@@ -117,10 +117,12 @@
   };
 
   // ---------- character (same spot and behaviour as your zip) ----------
-  const POSES = ['smile', 'wave', 'hello', 'idea', 'explain', 'cheer', 'sleep', 'excited', 'cry', 'type', 'angry', 'blush', 'flirty', 'pain', 'period'];
-  const BYTE_ALIAS = { hello: 'smile', wave: 'explain', excited: 'cheer', sleep: 'smile', angry: 'explain', blush: 'smile', flirty: 'smile', pain: 'cry', period: 'cry' };
+  const POSES = ['smile', 'wave', 'hello', 'idea', 'explain', 'cheer', 'sleep', 'excited', 'cry', 'type', 'angry', 'blush', 'flirty', 'pain', 'period', 'faint', 'zzz', 'charge'];
+  const BYTE_ALIAS = { hello: 'smile', wave: 'explain', excited: 'cheer', sleep: 'smile', angry: 'explain', blush: 'smile', flirty: 'smile', pain: 'cry', period: 'cry', faint: 'cry', zzz: 'smile', charge: 'smile' };
   // Her face follows her mood (the header chip shows the same mood).
   const MOOD_POSE = { angry: 'angry', sulky: 'angry', jealous: 'angry', hate: 'angry', hurt: 'cry', love: 'blush', sad: 'cry', in_pain: 'pain', moody: 'period', flirty: 'flirty', clingy: 'blush', happy: 'cheer', hyper: 'excited', sleepy: 'sleep', sleeping: 'sleep', lazy: 'sleep' };
+  // battery and update states beat every mood: fainted, charging, or asleep in an update
+  const lockPose = () => { const h = App.herState; if (!h) return null; const b = h.battery; if (b && b.enabled && b.charging) return 'charge'; if (b && b.enabled && b.fainted) return 'faint'; return h.updating ? 'zzz' : null; };
   const moodPose = () => (App.herKind && App.herKind !== 'normal' ? MOOD_POSE[App.herKind] || null : null);
   const isBoy = () => App.settings && App.settings.persona.gender === 'boy';
   const stk = (n) => '/images/stickers/' + (isBoy() ? 'byte-' + (BYTE_ALIAS[n] || n) : 'tiny-' + n) + '.webp';
@@ -150,7 +152,7 @@
     playMotion(p);
     const vi = $('#vImg'); if (vi) vi.src = stk(p);
   }
-  const restPose = () => App.busy ? 'explain' : extState.speaking ? 'hello' : extState.listening ? 'idea' : (hovering || stickerOpen) ? 'idea' : idleSleep ? 'sleep' : ($('#input').value.trim() ? 'type' : (App.herKind ? (moodPose() || 'smile') : (sleepMode() ? 'sleep' : 'smile')));
+  const restPose = () => lockPose() || (App.busy ? 'explain' : extState.speaking ? 'hello' : extState.listening ? 'idea' : (hovering || stickerOpen) ? 'idea' : idleSleep ? 'sleep' : ($('#input').value.trim() ? 'type' : (App.herKind ? (moodPose() || 'smile') : (sleepMode() ? 'sleep' : 'smile'))));
   App.flashPose = (p, ms = 3500) => { clearTimeout(poseHold); showPose(p, true); poseHold = setTimeout(() => { poseHold = null; showPose(restPose()); }, ms); };
   App.restPose = () => { if (!poseHold) showPose(restPose()); };
   App.swapCharacter = () => { stickerImg.src = stk(curPose); POSES.forEach((p) => { new Image().src = stk(p); }); $('#vImg').src = stk(curPose); };
@@ -217,6 +219,7 @@
     row.appendChild(b); messagesEl.appendChild(row); toBottom();
     return b;
   }
+  App.say = (text) => { const w = $('.welcome'); if (w) w.remove(); addRow('bot', text); };
   function addTyping() {
     if ($('#typingRow')) return;
     const row = document.createElement('div'); row.className = 'row bot'; row.id = 'typingRow';
@@ -322,7 +325,7 @@
       App.flashPose(App.sleptTurn ? 'sleep' : answerPose(text, full), 3800); App.sleptTurn = false;
       learnedToast(startedAt);
       refreshRecent();
-      if (App.refreshHer) { setTimeout(App.refreshHer, 3500); setTimeout(App.refreshHer, 9000); }
+      if (App.refreshHer) { setTimeout(App.refreshHer, 400); setTimeout(App.refreshHer, 3500); setTimeout(App.refreshHer, 9000); }
       if ((App.settings.voice.autoplay || opts.speak) && !opts.silent) App.speak(full);
     } catch (e) {
       cancelAnimationFrame(raf); rmTyping();

@@ -75,12 +75,17 @@
       mr.start(250);
     });
   }
+  let lang = 'en';
+  try { lang = localStorage.getItem('tiny.listLang') || 'en'; } catch (e) {}
+  const paintLang = () => document.querySelectorAll('#lLang button').forEach((b) => b.classList.toggle('on', b.dataset.l === lang));
+  document.querySelectorAll('#lLang button').forEach((b) => b.addEventListener('click', () => { lang = b.dataset.l; try { localStorage.setItem('tiny.listLang', lang); } catch (e) {} paintLang(); }));
+  paintLang();
   async function speak(btn) {
     const blob = await record(btn);
     if (!blob) return null;
     btn.disabled = true; App.toast('Listening to your recording...', 8000);
     try {
-      const r = await App.api('/api/lists/speech', { body: blob, headers: { 'Content-Type': blob.type || 'audio/webm' } });
+      const r = await App.api('/api/lists/speech?lang=' + lang, { body: blob, headers: { 'Content-Type': blob.type || 'audio/webm' } });
       App.toast('Done. ' + r.points.length + ' point' + (r.points.length === 1 ? '' : 's') + ' added.');
       return r;
     } catch (e) { App.toast(e.message); return null; } finally { btn.disabled = false; }
@@ -119,7 +124,7 @@
     if (!cur || !cur.items.length) return;
     const b = e.currentTarget; b.disabled = true;
     try {
-      const r = await App.api('/api/lists/tidy', { body: { text: cur.items.map((x) => x.t).join('\n'), mode: 'fix' } });
+      const r = await App.api('/api/lists/tidy', { body: { text: cur.items.map((x) => x.t).join('\n'), mode: 'fix', lang } });
       if (r.points && r.points.length === cur.items.length) { cur.items.forEach((x, i) => { x.t = r.points[i]; }); paintItems(); queue(); App.toast('Grammar fixed.'); }
       else App.toast('Could not fix it this time. Try again.');
     } catch (er) { App.toast(er.message); } finally { b.disabled = false; }

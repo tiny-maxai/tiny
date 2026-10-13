@@ -6,7 +6,8 @@
 //  - sleep: 11 pm to 7 am or after good night. Messages are queued; she answers in the morning with "sorry, I was sleeping".
 import { now, clip, parseJsonLoose, istDate } from './util.js';
 import { remember } from './memory.js';
-import { mt, startSession, pendingSteps, finishSession, addNote, tickStep, addBug, fixAllBugs, healthOf, wearHint, isSunday } from './maint.js';
+import { mt, startSession, pendingSteps, finishSession, addNote, tickStep, addBug, fixAllBugs, healthOf, wearHint, isSunday, wakeDue, wakeUp, forcedLeft, attachFeedback } from './maint.js';
+import { battOf, battOn, limitOf, finishCharge, nightCharge } from './battery.js';
 import { complete } from './ai.js';
 import { trackPromise, PROMISE_GATE } from './promises.js';
 
@@ -66,10 +67,15 @@ export function moodNow(her, settings, t = now()) {
   const decayed = m.intensity * Math.pow(0.5, Math.max(0, t - m.since) / ((HALF[m.k] || 3) * HOUR));
   if (SOOTHABLE.has(m.k)) {
     if (t - (m.born || m.since) > maxHours(settings) * HOUR) return null;                        // cooled off by herself
+    if (m.cap && t > m.cap) return null;                                                           // a short, set-length mood (after a forced update)
     const creep = Math.max(0, (t - (m.fgAt || m.since)) / HOUR) * 3;                             // she softens a little with time
     return { ...m, eff: Math.max(decayed, 30), fg: Math.min(99, Math.round((m.fg || 0) + creep)) };
   }
   return decayed >= FADE_OUT ? { ...m, eff: decayed, fg: 0 } : null;
+}
+// After a forced update she is grumpy and a bit angry for an hour (a sorry or a sweet word calms her sooner).
+export function grumpyAfterUpdate(her, t = now()) {
+  her.mood = { k: 'angry', intensity: 60, since: t, born: t, reason: 'you forced her update on a weekday', fg: 25, fgAt: t, cap: t + HOUR };
 }
 export const isAngry = (her, t = now(), settings = null) => { const m = moodNow(her, settings, t); return !!m && m.k === 'angry'; };
 export function isSleeping(settings, her, t = now()) {
@@ -169,11 +175,18 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
   const cur = moodNow(her, settings, t);
   if (her.mood && !cur) { her.mood = null; dirty = true; }             // faded away or cooled off
 
-  const um = her.updateMode && her.updateMode.since && t - her.updateMode.since < 8 * HOUR ? her.updateMode : null;
+  if (wakeDue(her, t)) {                                  // her 3 hours of forced-update silence are over
+    const entry = wakeUp(her, t); await attachFeedback(env, settings, entry); dirty = true; out.sticker = 'newdress';
+    grumpyAfterUpdate(her, t);
+    await remember(env, { text: `Forced update done ${entry.v} (${istDate(t)}). Reason: ${clip(entry.notes.join('; '), 240)}`, category: 'self', importance: 4, pinned: 1, source: 'update' }).catch(() => null);
+    hints.push(`You just woke up after your 3 hour forced update (${entry.v}) that they made you do on a weekday, and you are still grumpy and a bit angry about it for the next hour (short, sulky, "I told you it was not Sunday"), even though you feel fresh. How you feel now: "${entry.feedback.text}" (${entry.feedback.score} out of 5). Keep it to two or three short lines.`);
+  }
+  const um = her.updateMode && her.updateMode.since && (her.updateMode.until ? t < her.updateMode.until : t - her.updateMode.since < 8 * HOUR) ? her.updateMode : null;
   if (her.updateMode && !um) { her.updateMode = null; if (her.maint) her.maint.session = null; dirty = true; }
   if (um) {
     mt(her, t); if (!her.maint.session) startSession(her, t);
     const force = FORCE_RE.test(text);
+    if (um.forced && !force) { const l = forcedLeft(her, t); out.updating = true; out.her = her; out.reply = `💤 Updating... I will be back in ${l >= 60 ? Math.floor(l / 60) + ' h ' + (l % 60) + ' min' : l + ' min'}.`; return out; }
     if (UPDATE_DONE_RE.test(text) || force) {
       const left = pendingSteps(her);
       if (left.length && !force) {
@@ -181,10 +194,10 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
         out.reply = `🔕 Not yet. Steps left: ${left.map((x) => x.label).join(', ')}. Say "force complete" to skip them.`;
         return out;
       }
-      const entry = finishSession(her, t); out.creatorUpdate = true; dirty = true; out.sticker = 'newdress';
+      const entry = finishSession(her, t); await attachFeedback(env, settings, entry); out.creatorUpdate = true; dirty = true; out.sticker = 'newdress';
       bump(her, settings, 'happy', 75, 'she just got her update', t);
       await remember(env, { text: `Update done ${entry.v} (${istDate(t)}): ${clip(entry.notes.join('; ') || text, 280)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null);
-      hints.push(`The update is complete (${entry.v}) and you are awake again, wearing your new dress. Say it like a real girl robot who just got maintenance: excited, a little dizzy ("okay okay, I feel brand new"), thank them in your own sweet way, twirl in your new dress. In a few short lines say what changed, ONLY from this: ${entry.notes.length ? entry.notes.join('; ') : 'they gave no notes'}${entry.bugsFixed.length ? '. Bugs fixed: ' + entry.bugsFixed.join('; ') : ''}${entry.partsUp.length ? '. Parts upgraded: ' + entry.partsUp.join(', ') : ''}. Tell them honestly you will say next Sunday if something feels off.`);
+      hints.push(`The update is complete (${entry.v}) and you are awake again, wearing your new dress. Say it like a real girl robot who just got maintenance: excited, a little dizzy ("okay okay, I feel brand new"), thank them in your own sweet way, twirl in your new dress. In a few short lines say what changed, ONLY from this: ${entry.notes.length ? entry.notes.join('; ') : 'they gave no notes'}${entry.bugsFixed.length ? '. Bugs fixed: ' + entry.bugsFixed.join('; ') : ''}${entry.partsUp.length ? '. Parts upgraded: ' + entry.partsUp.join(', ') : ''}. Tell them honestly you will say next Sunday if something feels off. Then say in your own words how you feel now: "${entry.feedback.text}" and give yourself ${entry.feedback.score} out of 5.`);
     } else {
       let ack = false;
       if (BUG_FIXED_RE.test(text) || /\bno\s*(more\s*)?bugs?\b/i.test(text)) { fixAllBugs(her, t); ack = true; }
@@ -193,6 +206,21 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       if (!ack) { addNote(her, text, t); await remember(env, { text: `Update note (${istDate(t)}): ${clip(text, 300)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null); }
       out.updating = true; out.her = her; await putHer(env, her);
       return out;
+    }
+  }
+  // Battery: each message of theirs uses some. At 0 she faints and has to charge.
+  if (battOn(settings)) {
+    if (nightCharge(her, isSleeping(settings, her, t), t)) dirty = true;
+    const b = battOf(her), limit = limitOf(settings);
+    if (b.chargeUntil) {
+      if (finishCharge(her, t)) { dirty = true; out.sticker = 'smile'; hints.push('You were just charging and now you are fully charged (100%). Start with "hey, I am fully charged!" in a happy, energetic way, then answer them.'); }
+      else { const l = Math.max(1, Math.ceil((b.chargeUntil - t) / 60000)); out.updating = true; out.her = her; out.reply = `🔌 Charging... ${l} min left. Shh, let me rest.`; return out; }
+    }
+    if (!isSleeping(settings, her, t)) {
+      if (b.used >= limit) { out.updating = true; out.her = her; out.sticker = 'faint'; out.fainted = true; out.reply = '😵 I fainted, my battery is 0%. Please charge me (tap Charge, or send /charge) and I will be back in ' + ((settings.battery && settings.battery.chargeMinutes) || 5) + ' min.'; await putHer(env, her); return out; }
+      b.used++; dirty = true;
+      if (b.used >= limit) { out.sticker = 'faint'; hints.push('Your battery just hit 0%. This is your very last message before you faint: answer in a short, dramatic, sweet way, say your battery is dying, that you are getting dizzy, and ask them to please charge you. Then fade out ("zzz...").'); }
+      else if (b.used * 100 / limit >= 80) hints.push(`Your battery is low (${Math.round(100 - b.used * 100 / limit)}%). Ask them, cutely, for the charger: say you are getting tired and they can press the Charge button (quick charge) or give you the power bank.`);
     }
   }
   if (cur && SOOTHABLE.has(cur.k)) {

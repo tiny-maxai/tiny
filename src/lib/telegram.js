@@ -1,6 +1,7 @@
 // Telegram bot: same brain, same memories as the website. Only OWNER_TG_ID may talk to it.
 import { chatOnce, finishChat, sleepTurn } from './chat.js';
-import { beforeReply, sleepingLine, getHer } from './her.js';
+import { beforeReply, sleepingLine, getHer, putHer } from './her.js';
+import { startCharge, batteryView, usePowerBank, powerLine } from './battery.js';
 import { herView, moodKindNow } from './tinymood.js';
 import { reportOf, viewOf } from './maint.js';
 import { getAmbient } from './ambient.js';
@@ -213,6 +214,18 @@ async function processMessage(env, msg) {
     await send(env, chat, `${settings.persona.name}'s health: ${rep.health.health}% (${rep.health.state}) | ${viewOf(her, settings).version}\n${rep.health.due ? (rep.health.overdueDays ? 'Maintenance is overdue.' : 'Maintenance is due today.') : 'Maintenance done for this week.'}\n\n` + rep.checks.map((c) => `${icon[c.status] || c.status}  ${c.name}: ${c.note}`).join('\n') + '\n\n/health test  runs a real thinking test');
     return;
   }
+  if (/^\/power/i.test(cmd)) {
+    const her = await getHer(env), was = batteryView(settings, her).fainted, r = usePowerBank(her, settings);
+    if (r === 'ok') { await putHer(env, her); await send(env, chat, await powerLine(env, settings, was)); await sendSticker(env, chat, 'smile').catch(() => false); }
+    else await send(env, chat, r === 'used' ? 'The power bank was already used today. Try tomorrow.' : 'Battery is already full.');
+    return;
+  }
+  if (/^\/(charge|battery)\b/i.test(cmd)) {
+    const her = await getHer(env), r = startCharge(her, settings);
+    if (r === 'started') { await putHer(env, her); await send(env, chat, `🔌 Charging. I will say when I am full (${(settings.battery && settings.battery.chargeMinutes) || 5} min).`); await sendSticker(env, chat, 'charge').catch(() => false); }
+    else { const v = batteryView(settings, her); await send(env, chat, r === 'already' ? `🔌 Already charging, ${v.minsLeft} min left.` : `🔋 Battery ${v.pct}%. No need to charge yet.`); }
+    return;
+  }
   if (/^\/mood\b/i.test(cmd)) {
     const v = herView(settings, await getHer(env), { period: periodNow(settings), lastActive: await lastActive(env), ambient: await getAmbient(env, settings).catch(() => null) });
     await send(env, chat, `${settings.persona.name} feels: ${v.emoji} ${v.label}${v.angry ? '. Make her happy to calm her down.' : v.sleeping ? '. She is sleeping.' : ''}`);
@@ -250,7 +263,7 @@ async function processMessage(env, msg) {
   const convId = (await env.KV.get(kvKey)) || null;
   // She sleeps from 11 pm to 7 am and after you say good night: no AI, one short "sleeping" line, then she stays quiet.
   const gate = await beforeReply(env, settings, text);
-  if (gate.updating) { await send(env, chat, gate.reply || '🔕'); return; }   // update mode: silent, your words are saved as update notes
+  if (gate.updating) { await send(env, chat, gate.reply || '🔕'); if (gate.sticker) await sendSticker(env, chat, gate.sticker).catch(() => false); return; }   // update mode: silent, your words are saved as update notes
   if (gate.sleeping) {
     const id = await sleepTurn(env, { convId, text, source: 'telegram', via, reply: '' });   // saved and queued: she answers in the morning
     if (!convId) await env.KV.put(kvKey, id);
