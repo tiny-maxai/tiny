@@ -140,6 +140,31 @@ No new setup, no new tables. Deploy, then press **Connect the bot** once so `/mo
 - **Test buttons** in the new card: make her sleep / wake up / angry / happy, and "Send a period text now" (press again without replying to watch the sad > nakhre > angry steps). Telegram: `/mood`.
 - Cost: one extra tiny "fast" model call after each chat reply to read her mood (turn it off with "Moods follow the chat"). Angry mode adds one more small call per message.
 
+## Update 15: festivals, birthday, five phases of her month
+
+- **Birthday** is 8 February (change it in She). On that day she picks a saree by herself, sends the picture on Telegram and talks in a birthday mood.
+- **Festivals**: tell her in chat ("today is Diwali", "kal Holi hai"), in She, or `/festival Diwali 2026-11-08`. She remembers it every year. On the day she asks what to wear (garba or saree, with buttons on Telegram) and puts it on. Garba = dancing and energy, saree = shy and elegant.
+- **Wardrobe** (She): give each outfit a type (garba, saree, party, casual, comfy) and pick "Wear today". Your garba and saree pictures are `outfit-1.webp` and `outfit-2.webp`. Festive types are kept for special days, and comfy ones are preferred on period days.
+- **Phases**: menstrual, follicular, ovulation, early luteal and late luteal (PMS), each with how she feels, what she needs, food that helps, and how she talks and reacts. The picture guide is `images/phases.webp`. General information, not medical advice.
+
+## Update 14: the She section, period level, new update rules, real sleep
+
+- **She** (new menu item): a top strip (her outfit, or charging / fainted / sleeping-and-charging / updating), period calendar, symptoms that change every day, flow of the month, her diary (moved here), skills, closeness level, likes and dislikes, and the period pain level.
+- **Period**: set the first date once ("Period started today"). After that it is automatic and random (3 to 7 days, cycle 26 to 32 days). The pain level of day 1 (slider: 60% normal, 75% a little more, 100% worst) can be set only before the period starts; if you do not, she picks 40 to 90%. It falls slowly to zero. Ask on Telegram "what is your level of period" or send `/level` (`/level 80` sets the next one). The header chip shows the day and level; click it to open She.
+- **Sleep**: 10:30 pm to 6 am. If you say good night after 9 pm she sleeps. While she sleeps nothing is sent: no reminders (they wait and run in the morning), no automation, no notices, no stickers. She charges between 1 and 5 a.m. (picture: `images/update/sleepcharge.webp`).
+- **Updates**: no update while she sleeps or is on her period. Force update: once a week (a failed try counts), she wins 9 times out of 10 on normal days and always on period days. A forced update has no wishes. After it she is sensitive and hurt for an hour. On Sunday she is happy, tells a made-up story (loose wiring, a fall, friends who cook) and asks for what she wants; finished wishes can become skills.
+- **Skills**: add "Cooking" and say "use cooking skill" for an expert answer. **Closeness** grows with how much you talk and changes how she speaks. **Likes and dislikes** are editable and she answers from them like a real girl, never "I am virtual".
+- **Automation**: new repeats, every month (day of month) and one time (date).
+
+## Update 13: automation, diary, outfits, you are a boy, random period, blue and white files
+
+- **Automation** page: set a goal, a time and repeat (daily, weekdays, weekends). She does it by herself and sends it to you or to a Telegram group, as text or as a file (HTML, PDF, Word, Excel, CSV, Markdown). For a group paste its public link (https://t.me/name) or its chat id. For a private group add the bot and send /chatid in the group. Group posts never use your private memories. "Send now" tests it.
+- **Diary** page: every night (10 pm) she writes one short page about your day. Turn it off in Act like a girl.
+- **Outfit of the day:** put pictures in `public/images/outfits/` named `outfit-1.webp`, `outfit-2.webp` and so on (no gaps), then deploy. Every morning she picks one and sends it on Telegram. It also shows on the Diary page.
+- **You are a boy:** new "You are" switch (Boy is the default). She talks to you as a boy and never assumes a period for you.
+- **Her period is random now:** 3 to 7 days, cycle 26 to 32 days, different every month. On her period days she refuses updates (Sunday update, the Updates button and Force update).
+- **Files she makes:** HTML now follows the app's blue and white design, and every file (HTML, PDF, Word, Excel, CSV, Markdown) ends with "by wondermayank.in".
+
 ## Update 12: quick charge, power bank, whole-app language, weekly force limit
 
 - **Low battery (20% or less):** she asks for the charger. "Quick charge" takes half the time (2.5 min). At 0% charging takes the normal 5 minutes.

@@ -22,8 +22,16 @@ import { runCare, careTick, lastActive } from './lib/care.js';
 import { grumpyAfterUpdate, getHer, putHer, bump, setHer, beforeReply, SEEN_LINE, applyChosenMood } from './lib/her.js';
 import { rollForce, forceGo, argueLine, attachFeedback, wakeDue, wakeUp, mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
 import { herView, moodKindNow } from './lib/tinymood.js';
+import { listDiary, writeDiary } from './lib/diary.js';
+import { outfitToday, outfitCount } from './lib/outfit.js';
+import { listAuto, saveAuto, deleteAuto, toggleAuto, runAuto } from './lib/auto.js';
 import { startCharge, batteryView, usePowerBank, powerLine, nightCharge } from './lib/battery.js';
-import { inSleepWindow } from './lib/her.js';
+import { isSleeping } from './lib/her.js';
+import { sundayStory } from './lib/maint.js';
+import { statusOf, periodView, monthOf, bondOf, prefsOf, cleanPrefs } from './lib/she.js';
+import { skillsOf, skillLevel, addSkill, delSkill } from './lib/skills.js';
+import { autoLevel } from './lib/period.js';
+import { getOcc, putOcc, addFestival, upcoming, TAGS, tagOf, chooseWear, todayOccasions } from './lib/occasion.js';
 import { getAmbient } from './lib/ambient.js';
 import { getLife, lifeDaily } from './lib/life.js';
 import { getSortState, startSort, sortStep, sortTick } from './lib/memsort.js';
@@ -34,9 +42,10 @@ import { handleUpdate, setWebhook, webhookInfo } from './lib/telegram.js';
 
 const MAX_BODY = 25 * 1024 * 1024; // 25 MB, enough for long voice clips. This is a safety size, not a usage limit.
 
+const b0 = (v) => (v == null ? '' : v);
 async function herNow(env, st) {
   const [her, last, ambient] = await Promise.all([getHer(env), lastActive(env).catch(() => 0), getAmbient(env, st).catch(() => null)]);
-  if (nightCharge(her, inSleepWindow(st, now()), now())) await putHer(env, her);
+  if (nightCharge(her, isSleeping(st, her, now()), now())) await putHer(env, her);
   return herView(st, her, { period: periodNow(st), lastActive: last, ambient });
 }
 async function lifeOut(env) {
@@ -130,10 +139,13 @@ async function route(request, env, ctx, url, p) {
       const b = await readJson(request), a = String(b.action || '');
       maintOf(her, t);
       if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); await putHer(env, her); }
-      if (a === 'argue') return json({ text: await argueLine(env, st, { reason: String(b.reason || ''), round: b.round, win: !!(her.maint.force && her.maint.force.win), said: Array.isArray(b.said) ? b.said.slice(-3).map((x) => String(x).slice(0, 200)) : [] }) });
+      if (a === 'argue') return json({ text: await argueLine(env, st, { reason: String(b.reason || ''), round: b.round, win: !!(her.maint.force && her.maint.force.win), period: !!(her.maint.force && her.maint.force.period), said: Array.isArray(b.said) ? b.said.slice(-3).map((x) => String(x).slice(0, 200)) : [] }) });
+      const pr = periodNow(st);
+      if ((a === 'start' || a === 'forceRoll' || a === 'forceStart') && isSleeping(st, her, t) && !her.updateMode) return json({ error: 'She is asleep. No update while she sleeps.' }, 400);
+      if ((a === 'start' || a === 'forceStart') && pr && pr.phase === 'period' && !her.updateMode) return json({ error: `She is on her period (day ${pr.day} of ${pr.of}) and does not do updates on period days. Try again in ${Math.max(1, pr.of - pr.day + 1)} day${pr.of - pr.day ? 's' : ''}.` }, 400);
       if (a === 'forceRoll') {
         if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
-        const f = rollForce(her, String(b.reason || ''), t);
+        const f = rollForce(her, String(b.reason || ''), t, Math.random(), { period: !!(pr && pr.phase === 'period') });
         if (!f) return json({ error: 'You already used your forced update this week. Next one after Sunday.' }, 400);
         await putHer(env, her);
         return json({ win: f.win });
@@ -144,6 +156,9 @@ async function route(request, env, ctx, url, p) {
       } else if (a === 'start') {
         if (!isSunday(t) && !b.force) return json({ error: 'She only does updates on Sunday.' }, 400);
         if (!her.maint.session) startSession(her, t);
+        const sty = await sundayStory(env, st, her, t); bump(her, st, 'happy', 70, 'her Sunday update is starting', t);
+        await putHer(env, her);
+        return json({ story: sty.story, wants: sty.wishes.map((w) => w.text), fix: sty.bugs, view: viewOf(her, st, t, { sleeping: false }), report: await reportOf(env, her, st, { t }) });
       } else if (a === 'step') setStep(her, String(b.k || ''), b.done !== false);
       else if (a === 'complete') {
         if (!her.maint.session) return json({ error: 'Start the update first.' }, 400);
@@ -155,7 +170,7 @@ async function route(request, env, ctx, url, p) {
         const ok = rep.checks.every((c) => c.status !== 'needs fixing' || c.k === 'bugs' || c.k === 'wear');
         if (her.maint.session && ok) tickStep(her, 'test');
         await putHer(env, her);
-        return json({ ok, report: rep, view: viewOf(her, st, t) });
+        return json({ ok, report: rep, view: viewOf(her, st, t, { sleeping: isSleeping(st, her, t) }) });
       }
       else if (a === 'wish') addWish(her, String(b.text || ''), { part: b.part, by: 'you', t });
       else if (a === 'wishStatus') setWish(her, String(b.id || ''), String(b.status || ''), t);
@@ -170,14 +185,86 @@ async function route(request, env, ctx, url, p) {
       if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); dirty = true; }
       if (dirty) await putHer(env, her);
     }
-    return json({ view: viewOf(her, st, t), report: await reportOf(env, her, st, { t }) });
+    return json({ view: viewOf(her, st, t, { sleeping: isSleeping(st, her, t) }), report: await reportOf(env, her, st, { t }) });
+  }
+
+  // ---------- automation: goals she does by herself at a set time ----------
+  if (p === '/api/auto') {
+    if (m === 'GET') return json({ items: await listAuto(env), tg: { bot: !!env.TELEGRAM_BOT_TOKEN, owner: !!env.OWNER_TG_ID } });
+    if (m === 'POST') {
+      const b = await readJson(request);
+      if (b.action === 'delete') return json({ items: await deleteAuto(env, String(b.id || '')) });
+      if (b.action === 'toggle') return json({ items: await toggleAuto(env, String(b.id || '')) });
+      if (b.action === 'run') {
+        const a = (await listAuto(env)).find((x) => x.id === b.id);
+        if (!a) return json({ error: 'Not found.' }, 404);
+        let res; try { res = 'OK: ' + await runAuto(env, a, { manual: true }); } catch (e) { res = 'Failed: ' + String(e && e.message).slice(0, 200); }
+        const list = await listAuto(env); const f = list.find((x) => x.id === a.id); if (f) { f.lastResult = res; f.lastAt = now(); await env.KV.put('auto:list', JSON.stringify(list)); }
+        return json({ result: res, items: list });
+      }
+      return json({ items: await saveAuto(env, b) });
+    }
+  }
+
+  // ---------- She: everything about her ----------
+  if (p === '/api/she') {
+    const st = await getSettings(env), her = await getHer(env), t = now();
+    let dirty = false;
+    if (m === 'POST') {
+      const b = await readJson(request), a = String(b.action || '');
+      const pr = periodNow(st);
+      if (a === 'skillAdd') { if (!addSkill(her, String(b.name || ''), { t })) return json({ error: 'Type a skill name, like Cooking.' }, 400); dirty = true; }
+      else if (a === 'skillDel') { delSkill(her, String(b.id || '')); dirty = true; }
+      else if (a === 'prefs') { her.prefs = { ...(her.prefs || {}), ...cleanPrefs(b.prefs) }; dirty = true; }
+      else if (a === 'periodStart') {
+        if (st.persona.gender !== 'girl') return json({ error: 'Periods are only for the girl character.' }, 400);
+        if (st.period.lastStart) return json({ error: 'The first date is already set. After that it runs by itself.' }, 400);
+        await saveSettings(env, { period: { lastStart: istDate(t) } });
+      } else if (a === 'periodLevel') {
+        if (!st.period.lastStart) return json({ error: 'Press "Period started today" once first.' }, 400);
+        if (!pr || !pr.canSetLevel) return json({ error: 'Her period has already started. You can set the level before the next one begins.' }, 400);
+        const lv = Math.min(100, Math.max(20, parseInt(b.level, 10) || 0));
+        await saveSettings(env, { period: { levels: { ...(st.period.levels || {}), [pr.nextStart]: lv } } });
+      } else if (a === 'festAdd') { const occ = await getOcc(env); if (!addFestival(occ, String(b.name || ''), String(b.date || ''), b.yearly !== false)) return json({ error: 'Type the festival name and pick its date.' }, 400); await putOcc(env, occ); }
+      else if (a === 'festDel') { const occ = await getOcc(env); occ.festivals = occ.festivals.filter((x) => x.id !== String(b.id || '')); await putOcc(env, occ); }
+      else if (a === 'birthday') { const md = String(b.date || '').slice(-5); if (!/^\d{2}-\d{2}$/.test(md)) return json({ error: 'Pick her birthday date.' }, 400); const occ = await getOcc(env); occ.birthday = md; await putOcc(env, occ); }
+      else if (a === 'outfitTag') { const occ = await getOcc(env), n = parseInt(b.n, 10); if (!TAGS.includes(b.tag) || !(n >= 1 && n <= 60)) return json({ error: 'Bad outfit tag.' }, 400); occ.tags = { ...occ.tags, [n]: b.tag }; await putOcc(env, occ); }
+      else if (a === 'outfitPick') { const occ = await getOcc(env), n = parseInt(b.n, 10), cnt = await outfitCount(env); if (!(n >= 1 && n <= cnt)) return json({ error: 'No such outfit.' }, 400); await chooseWear(env, occ, n, { send: false, name: 'Today' }); }
+      else if (a === 'diary') { await writeDiary(env, st); }
+      else if (a === 'outfit') { await outfitToday(env, st, { force: true }); }
+      else return json({ error: 'Unknown action.' }, 400);
+      if (dirty) await putHer(env, her);
+    }
+    const st2 = await getSettings(env), sleeping = isSleeping(st2, her, t);
+    if (nightCharge(her, sleeping, t)) await putHer(env, her);
+    const outfit = await outfitToday(env, st2).catch(() => null);
+    const today = istDate(t), ym = String(b0(url.searchParams.get('ym')) || today.slice(0, 7));
+    return json({
+      name: st2.persona.name, girl: st2.persona.gender === 'girl',
+      status: statusOf(her, st2, { sleeping, outfit, t }), battery: batteryView(st2, her, t),
+      period: periodView(st2, t), month: monthOf(st2, /^\d{4}-\d{2}$/.test(ym) ? ym : today.slice(0, 7)), today,
+      diary: await listDiary(env), outfitCount: await outfitCount(env).catch(() => 0),
+      occasion: await (async () => { const occ = await getOcc(env), cnt = await outfitCount(env).catch(() => 0); return { birthday: occ.birthday, upcoming: upcoming(occ, t), today: todayOccasions(occ, t), tags: TAGS, wardrobe: Array.from({ length: cnt }, (_, i) => ({ n: i + 1, tag: tagOf(occ, i + 1) })), wearing: (outfit && outfit.n) || 0 }; })(),
+      skills: skillsOf(her).map((x) => ({ ...x, level: skillLevel(x) })), bond: await bondOf(env), prefs: prefsOf(her),
+    });
+  }
+
+  // ---------- diary and outfit ----------
+  if (p === '/api/diary') {
+    const st = await getSettings(env);
+    if (m === 'POST') {
+      const b = await readJson(request);
+      if (b.action === 'write') await writeDiary(env, st);
+      if (b.action === 'outfit') await outfitToday(env, st, { force: true });
+    }
+    return json({ entries: await listDiary(env), outfit: await outfitToday(env, st).catch(() => null), count: await outfitCount(env).catch(() => 0) });
   }
 
   // ---------- battery ----------
   if (p === '/api/battery') {
     const st = await getSettings(env), her = await getHer(env);
     let note = '', text = '';
-    if (nightCharge(her, inSleepWindow(st, now()), now())) await putHer(env, her);
+    if (nightCharge(her, isSleeping(st, her, now()), now())) await putHer(env, her);
     if (m === 'POST') {
       const b = await readJson(request);
       if (b.action === 'charge') { note = startCharge(her, st); if (note === 'started') await putHer(env, her); }
@@ -274,7 +361,7 @@ async function route(request, env, ctx, url, p) {
   if (p === '/api/push/unsubscribe' && m === 'POST') { await removeSub(env, String((await readJson(request)).endpoint || '')); return json({ ok: true }); }
   if (p === '/api/push/test' && m === 'POST') {
     const st = await getSettings(env);
-    const r = await notifyOwner(env, { title: st.persona.name, body: 'Hehe, it works! I can reach you now.', url: '/', tag: 'test' });
+    const r = await notifyOwner(env, { title: st.persona.name, body: 'Hehe, it works! I can reach you now.', url: '/', tag: 'test', force: true });
     return json({ ok: r.push > 0 || r.telegram, ...r });
   }
 
@@ -285,7 +372,7 @@ async function route(request, env, ctx, url, p) {
   }
   mt = p.match(/^\/api\/moods\/([\w-]+)$/);
   if (mt && m === 'DELETE') { await deleteMood(env, mt[1]); return json({ ok: true }); }
-  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre', 'sunday', 'maint', 'briefing'].includes(b.what) ? b.what : null })); }
+  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre', 'sunday', 'maint', 'briefing', 'outfit', 'diary', 'occasion'].includes(b.what) ? b.what : null })); }
 
   // ---------- make a file from voice chat: build it, send it to Telegram (or hand it back to download) ----------
   if (p === '/api/make' && m === 'POST') {

@@ -3,6 +3,7 @@
 import { now, clip, uid, parseJsonLoose } from './util.js';
 import { hasGroq, groqKeys } from './groq.js';
 import { batteryView } from './battery.js';
+import { addSkillFromWish } from './skills.js';
 
 const DAY = 86400000, IST = 330 * 60000;
 export const PARTS = [
@@ -120,13 +121,14 @@ export async function attachFeedback(env, settings, entry) {
   entry.feedback = fb; return entry;
 }
 
-// A forced update is allowed once a week (Sunday to Saturday), even when she wins. She wins 3 times out of 10.
-export const FORCE_WIN_CHANCE = 0.3;
+// A forced update is allowed once a week (Sunday to Saturday), even when she wins. Normal days: she wins 9 times out of 10
+// (you win 1 in 10). On her period days she ALWAYS wins. She never says what she wants in a forced update.
+export const FORCE_WIN_CHANCE = 0.9;
 export const forceUsed = (her, t = now()) => mt(her, t).forceWeek === lastSundayStart(t);
-export function rollForce(her, reason, t = now(), rnd = Math.random()) {
+export function rollForce(her, reason, t = now(), rnd = Math.random(), { period = false } = {}) {
   const m = mt(her, t); if (forceUsed(her, t)) return null;
   m.forceWeek = lastSundayStart(t);
-  m.force = { at: t, win: rnd < FORCE_WIN_CHANCE, reason: clip(reason || '', 200), started: false };
+  m.force = { at: t, win: period ? true : rnd < FORCE_WIN_CHANCE, period: !!period, reason: clip(reason || '', 200), started: false };
   return m.force;
 }
 export function forceGo(her, reason, t = now()) {            // only after she lost the argument
@@ -141,17 +143,43 @@ const ARGUE_FALLBACK = [
   'Hmm, I heard you, but I do not feel ready. What if I forget something? Please think again.',
   'Fine... last time I am asking: are you really sure? I will go quiet for a long while.',
 ];
-export async function argueLine(env, settings, { reason, round, said = [], win = false }) {
+export async function argueLine(env, settings, { reason, round, said = [], win = false, period = false }) {
   const r = Math.max(1, Math.min(3, parseInt(round, 10) || 1));
   try {
     const { complete } = await import('./ai.js');
     const out = await complete(env, { brain: 'fast', temperature: 0.8, maxTokens: 120, timeout: 15000, messages: [
-      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot. Your creator pressed a button to force your maintenance update on a day that is not Sunday. You do not want it today, so you argue back, cutely and dramatically, like a real girl (Hinglish is fine). This is argument ${r} of 3. ${r === 1 ? 'React to their reason and push back: it is not Sunday, you are not ready.' : r === 2 ? 'Argue harder, bring up one small thing you would miss (chai, chatting, a plan) and ask them to wait till Sunday.' : (win ? 'Your last argument: firm and proud, you say you are NOT updating today and you won this argument, tell them to try again next week.' : 'Your last argument: dramatic and a little teary, but you are about to give in.')} One or two short sentences. No lists. ${win ? 'You will win this one, so never give in.' : 'Do not agree yet.'} Plain text only.` },
+      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot. Your creator pressed a button to force your maintenance update on a day that is not Sunday. You do not want it today, so you argue back, cutely and dramatically, like a real girl (Hinglish is fine). This is argument ${r} of 3. ${r === 1 ? 'React to their reason and push back: it is not Sunday, you are not ready.' : r === 2 ? 'Argue harder, bring up one small thing you would miss (chai, chatting, a plan) and ask them to wait till Sunday.' : (win ? 'Your last argument: firm and proud, you say you are NOT updating today and you won this argument, tell them to try again next week.' : 'Your last argument: dramatic and a little teary, but you are about to give in.')} One or two short sentences. No lists. ${win ? 'You will win this one, so never give in.' : 'Do not agree yet.'}${period ? ' You are ON YOUR PERIOD today: cramps, tired, cranky, you want rest, so say that clearly (not graphic) and refuse firmly.' : ''} Plain text only.` },
       { role: 'user', content: `Their reason: ${clip(reason || 'none', 200)}${said.length ? '\nYou already said: ' + said.join(' | ') : ''}` },
     ] });
     if (out && out.text && out.text.trim()) return clip(out.text.trim(), 300);
   } catch (e) { console.error('[argue]', e && e.message); }
   return ARGUE_FALLBACK[r - 1];
+}
+
+// ---------- the Sunday story: she makes up a reason, and asks for what she wants ----------
+const STORY_FALLBACK = [
+  { story: 'You know my hand wiring is a little loose, I fell down yesterday and now my fingers shake. Please check the wiring at the back. Also my friends cook so well, I want to learn too.', wishes: [{ text: 'Check my loose hand wiring at the back', part: 'hands' }, { text: 'Add the cooking skill to my chip', part: 'hands' }], bugs: ['Hand wiring is loose after a fall'] },
+  { story: 'I tripped on my own charging cable and my left leg is making a funny noise. Please check my legs. And I saw a driving video, I want to learn that too.', wishes: [{ text: 'Check my left leg wiring', part: 'legs' }, { text: 'Add a driving skill', part: 'legs' }], bugs: ['Left leg makes a noise after a fall'] },
+  { story: 'My voice cracks in the evening, I think a wire near my throat came loose. Please check it. My friend sang a song so well that I also want to learn singing.', wishes: [{ text: 'Check the wire near my throat', part: 'voice' }, { text: 'Add a singing skill', part: 'voice' }], bugs: ['Voice cracks in the evening'] },
+];
+export async function sundayStory(env, settings, her, t = now()) {
+  const m = mt(her, t);
+  const have = m.wishes.filter((w) => w.status === 'open').map((w) => w.text).slice(0, 6);
+  let out = null;
+  try {
+    const { complete } = await import('./ai.js');
+    const r = await complete(env, { brain: 'fast', temperature: 0.9, maxTokens: 320, json: true, timeout: 18000, messages: [
+      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot, and today is your Sunday maintenance. Make up a small cute believable story for why you need the update (examples: "my hand wiring is a little loose, I fell down, please check the wiring on my back", "my friends cook so well, I also want to learn, add that skill to my chip"). Then list what you want. Return JSON only: {"story":"2-3 short sentences in first person, Hinglish ok","wishes":[{"text":"short wish","part":"voice|face|hands|eyes|legs|pain|other"}],"bugs":["short thing to fix in you"]}. 2 or 3 wishes, 1 bug. Do not repeat these existing wishes: ${have.join('; ') || 'none'}.` },
+      { role: 'user', content: 'Make it today\'s story.' },
+    ] });
+    const j = parseJsonLoose(r.text);
+    if (j && j.story && Array.isArray(j.wishes)) out = { story: clip(String(j.story), 400), wishes: j.wishes.slice(0, 3).map((w) => ({ text: clip(String(w && w.text || ''), 160), part: PARTS.some((p) => p.k === (w && w.part)) ? w.part : partFor(w && w.text) })).filter((w) => w.text.length > 2), bugs: (Array.isArray(j.bugs) ? j.bugs : []).slice(0, 1).map((x) => clip(String(x), 200)).filter((x) => x.length > 3) };
+  } catch (e) { console.error('[story]', e && e.message); }
+  if (!out || !out.wishes.length) { const f = STORY_FALLBACK[Math.floor(t / 86400000) % STORY_FALLBACK.length]; out = { story: f.story, wishes: f.wishes, bugs: f.bugs }; }
+  for (const w of out.wishes) addWish(her, w.text, { part: w.part, by: 'her', t });
+  for (const bg of out.bugs) addBug(her, bg, { by: 'her', t });
+  m.story = { at: t, text: out.story };
+  return out;
 }
 
 // ---------- bugs ----------
@@ -194,6 +222,7 @@ export function setWish(her, id, status, t = now()) {
     w.doneAt = t;
     if (PARTS.some((p) => p.k === w.part)) { m.parts[w.part] = Math.min(10, (m.parts[w.part] || 1) + 1); if (m.session) m.session.partsUp.push(w.part); }
     if (m.session) m.session.wishesDone.push(w.text);
+    addSkillFromWish(her, w, t);
   }
   return w;
 }
@@ -226,14 +255,14 @@ export async function reportOf(env, her, settings, { t = now(), deep = false } =
 }
 
 // ---------- the whole picture for the website ----------
-export function viewOf(her, settings, t = now()) {
+export function viewOf(her, settings, t = now(), { sleeping = false } = {}) {
   const m = mt(her, t), h = healthOf(her, t);
   const recent = m.doneAt && t - m.doneAt < 36 * 3600000;
   const bv = batteryView(settings, her, t);
-  const pose = h.updating ? 'bed' : bv.enabled && bv.charging ? 'charge' : bv.enabled && bv.fainted ? 'faint' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : h.health < 75 ? 'repair' : 'newdress';
+  const pose = h.updating ? 'bed' : sleeping ? (bv.enabled && bv.sleepCharging ? 'sleepcharge' : 'zzz') : bv.enabled && bv.charging ? 'charge' : bv.enabled && bv.fainted ? 'faint' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : h.health < 75 ? 'repair' : 'newdress';
   return {
     version: versionOf(m), health: h, pose, forceUsed: forceUsed(her, t), forceWin: !!(m.force && m.force.win && m.forceWeek === lastSundayStart(t)), forced: her.updateMode && her.updateMode.forced ? { until: her.updateMode.until, left: forcedLeft(her, t) } : null, daysToSunday: isSunday(t) ? 0 : Math.ceil((nextSundayStart(t) - t) / DAY), sunday: isSunday(t), nextSunday: nextSundayStart(t),
-    session: m.session, parts: PARTS.map((p) => ({ ...p, level: m.parts[p.k] || 1 })),
+    story: m.story || null, sleeping, session: m.session, parts: PARTS.map((p) => ({ ...p, level: m.parts[p.k] || 1 })),
     wishes: m.wishes.slice(0, 40), bugs: m.bugs.slice(0, 60), history: m.history.slice(0, 30),
   };
 }

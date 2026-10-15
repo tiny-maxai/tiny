@@ -10,9 +10,13 @@ import { moodContext } from './moods.js';
 import { periodNow } from './period.js';
 import { assist } from './assist.js';
 import { tinyMoodNow } from './tinymood.js';
-import { beforeReply, afterReply, getHer, queueMessage } from './her.js';
+import { beforeReply, afterReply, getHer, putHer, queueMessage } from './her.js';
 import { getLife, lifeLines } from './life.js';
 import { getAmbient, ambientLines } from './ambient.js';
+import { bondOf, prefsHint, humanRule } from './she.js';
+import { matchSkill, skillHint, skillLevel } from './skills.js';
+import { occasionTurn } from './occasion.js';
+import { outfitCount } from './outfit.js';
 
 export async function ensureConversation(env, convId, source, firstText) {
   if (convId) {
@@ -48,7 +52,9 @@ export async function prepareChat(env, { convId, text, source = 'web', via = 'te
   const hist = await env.DB.prepare('SELECT role,content FROM messages WHERE conv_id=? ORDER BY id DESC LIMIT 20').bind(id).all();
   const history = (hist.results || []).reverse().map((m) => ({ role: m.role, content: clip(m.content, m.role === 'user' && m.content.startsWith('[File: ') ? 17000 : 3000) }));
   const period = periodNow(settings);
-  const system = buildSystem({ settings, mem, spoken, source, note, task, moods, period, done: helped.done, web: helped.web, notes: helped.notes, moodKind: tinyMoodNow(settings, { lastActive: last, her: g.her || herNow, period, ambient: amb }), hint: g.hint || '', life: lifeLines(lifeNow), ambient: ambientLines(amb) });
+  const bond = task ? null : await bondOf(env).catch(() => null), sk = task ? null : matchSkill(herNow, text);
+  const extra = [humanRule(settings.persona.gender === 'girl'), prefsHint(herNow), bond ? `YOUR CLOSENESS WITH THEM: level ${bond.level} of ${bond.of} (${bond.name}). ${bond.talk} Never mention the level or its name.` : '', skillHint(sk), task ? '' : await occasionTurn(env, text, { source, count: await outfitCount(env).catch(() => 0) }).catch(() => '')].filter(Boolean).join('\n');
+  const system = buildSystem({ settings, mem, spoken, source, note, task, moods, period, done: helped.done, web: helped.web, notes: helped.notes, moodKind: tinyMoodNow(settings, { lastActive: last, her: g.her || herNow, period, ambient: amb }), hint: g.hint || '', life: lifeLines(lifeNow), ambient: ambientLines(amb), extra });
   return { convId: id, userMsgId, settings, messages: [{ role: 'system', content: system }, ...history] };
 }
 
@@ -59,6 +65,7 @@ export async function finishChat(env, { convId, userMsgId, text, reply, model, s
   await env.DB.prepare('UPDATE conversations SET updated_at=? WHERE id=?').bind(t, convId).run();
   const botId = ins.meta && ins.meta.last_row_id;
   const her = source === 'routine' ? {} : await getHer(env);
+  { const sk = source === 'routine' ? null : matchSkill(her, text); if (sk) { sk.skill.uses = (sk.skill.uses || 0) + 1; sk.skill.level = skillLevel(sk.skill); await putHer(env, her); } }
   const creator = !!(her.updateUntil && her.updateUntil > t);       // they said "I am going to update you": what they say about her is stored as her memory
   await Promise.allSettled([
     userMsgId ? indexChat(env, userMsgId, 'user', text, convId) : null,

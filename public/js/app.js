@@ -65,6 +65,8 @@
     notes: ['Notes', 'Pages you write, and chats you keep.'],
     maint: ['Updates', 'Her maintenance, versions and bugs.'],
     lists: ['Lists', 'Speak it, she makes the points.'],
+    auto: ['Automation', 'Goals she does by herself, on time.'],
+    she: ['She', 'Everything about her.'],
     tasks: ['Reminders', 'Things I do for you, on time.'],
     mood: ['Mood', 'How are you feeling today?'],
     persona: ['Act like a girl', 'Her name, her vibe, her voice.'],
@@ -122,7 +124,7 @@
   // Her face follows her mood (the header chip shows the same mood).
   const MOOD_POSE = { angry: 'angry', sulky: 'angry', jealous: 'angry', hate: 'angry', hurt: 'cry', love: 'blush', sad: 'cry', in_pain: 'pain', moody: 'period', flirty: 'flirty', clingy: 'blush', happy: 'cheer', hyper: 'excited', sleepy: 'sleep', sleeping: 'sleep', lazy: 'sleep' };
   // battery and update states beat every mood: fainted, charging, or asleep in an update
-  const lockPose = () => { const h = App.herState; if (!h) return null; const b = h.battery; if (b && b.enabled && b.charging) return 'charge'; if (b && b.enabled && b.fainted) return 'faint'; return h.updating ? 'zzz' : null; };
+  const lockPose = () => { const h = App.herState; if (!h) return null; const b = h.battery; if (h.sleeping && b && b.enabled && b.sleepCharging) return 'zzz'; if (b && b.enabled && b.charging) return 'charge'; if (b && b.enabled && b.fainted) return 'faint'; return h.updating ? 'zzz' : null; };
   const moodPose = () => (App.herKind && App.herKind !== 'normal' ? MOOD_POSE[App.herKind] || null : null);
   const isBoy = () => App.settings && App.settings.persona.gender === 'boy';
   const stk = (n) => '/images/stickers/' + (isBoy() ? 'byte-' + (BYTE_ALIAS[n] || n) : 'tiny-' + n) + '.webp';
@@ -427,7 +429,8 @@
       setTimeout(() => { if (App.refreshPending) App.refreshPending(false); }, 1800);
       if (!sleepMode()) setTimeout(() => App.flashPose('wave', 3500), 600);
       if (App.hooks.onBoot) App.hooks.onBoot();
-      const go = new URLSearchParams(location.search).get('go');
+      let go = new URLSearchParams(location.search).get('go');
+      if (go === 'diary') go = 'she';
       if (go && TITLES[go]) { App.showView(go); try { history.replaceState(null, '', '/'); } catch { /* ignore */ } }
     } catch (e) { if (e.status !== 401) App.toast(e.message, 5000); }
   }

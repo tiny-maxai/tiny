@@ -13,7 +13,10 @@ export function batteryView(settings, her, t = now()) {
   const base = Math.max(0, Math.round(100 - b.used * 100 / limit));
   const pct = charging ? Math.min(99, Math.round(base + (1 - (b.chargeUntil - t) / total) * (100 - base))) : base;
   const ready = !!b.chargeUntil && t >= b.chargeUntil;
-  return { enabled: battOn(settings), pct: ready ? 100 : Math.max(0, Math.min(100, pct)), used: b.used, limit, charging, fainted: !charging && !ready && b.used >= limit, minsLeft: charging ? Math.max(1, Math.ceil((b.chargeUntil - t) / 60000)) : 0, ready, low: !charging && base <= 20, pbUsed: b.pbDay === istDate(t), quickMin: Math.round((((settings.battery && settings.battery.chargeMinutes) || 5) / 2) * 10) / 10 };
+  const sw = b.slept ? sleepProgress(t) : null;                       // she sleeps on her bed with the cable in, charging between 1 and 5 a.m.
+  const sleepCharging = !!(b.slept && sw !== null && sw < 1);
+  const spct = b.slept && sw !== null ? Math.min(100, Math.round(base + sw * (100 - base))) : null;
+  return { enabled: battOn(settings), sleepCharging, pct: spct !== null ? spct : ready ? 100 : Math.max(0, Math.min(100, pct)), used: b.used, limit, charging, fainted: !charging && !ready && b.used >= limit, minsLeft: charging ? Math.max(1, Math.ceil((b.chargeUntil - t) / 60000)) : 0, ready, low: !charging && base <= 20, pbUsed: b.pbDay === istDate(t), quickMin: Math.round((((settings.battery && settings.battery.chargeMinutes) || 5) / 2) * 10) / 10 };
 }
 
 // Start charging (only when she is low). Returns true when charging started or was already on.
@@ -54,9 +57,31 @@ export async function powerLine(env, settings, wasFainted) {
 }
 
 // While she sleeps at night she charges: she starts the morning at 100%.
+// She charges between 1:00 and 5:00 (India time) while she sleeps. Woken earlier = only partly charged.
+const IST = 330 * 60000;
+function chargedHours(from, to) {                      // hours of [from,to] that fall inside a 1-5 a.m. window
+  let total = 0;
+  for (let d = Math.floor((from + IST) / 86400000) * 86400000 - IST; d < to; d += 86400000) {
+    const a = Math.max(from, d + 3600000), z = Math.min(to, d + 5 * 3600000);
+    if (z > a) total += (z - a) / 3600000;
+  }
+  return total;
+}
+export function sleepProgress(t = now()) {            // null = not in the charging hours yet; 0..1 while charging; 1 = full
+  const h = new Date(t + IST).getUTCHours() + new Date(t + IST).getUTCMinutes() / 60;
+  if (h >= 1 && h < 5) return (h - 1) / 4;
+  if (h >= 5 && h < 12) return 1;
+  return null;
+}
 export function nightCharge(her, asleep, t = now()) {
   const b = battOf(her);
-  if (asleep) { if (!b.slept) { b.slept = true; return true; } return false; }
-  if (b.slept) { b.slept = false; b.used = 0; b.chargeUntil = 0; return true; }
+  if (asleep) { if (!b.slept) { b.slept = true; b.sleptAt = t; return true; } return false; }
+  if (b.slept) {
+    const frac = Math.min(1, chargedHours(b.sleptAt || t - 8 * 3600000, t) / 4);
+    b.slept = false; b.chargeUntil = 0;
+    b.used = Math.round(b.used * (1 - frac) * 100) / 100;
+    if (frac >= 1) b.used = 0;
+    b.sleptAt = 0; return true;
+  }
   return false;
 }

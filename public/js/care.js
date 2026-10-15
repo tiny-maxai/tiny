@@ -66,35 +66,26 @@
   $('#teaseOn').addEventListener('change', (e) => App.saveSettings({ chat: { tease: e.target.checked, dayTexts: +$('#dayTexts').value } }));
   $('#dayTexts').addEventListener('change', (e) => App.saveSettings({ chat: { tease: $('#teaseOn').checked, dayTexts: +e.target.value } }));
   $('#tinyMood').addEventListener('change', async (e) => { const v = e.target.value; await App.saveSettings({ tinyMood: v }); if (!['auto', 'lazy', 'in_pain'].includes(v)) { e.target.value = 'auto'; App.toast('Done. She starts in that mood and it now changes with the chat.', 4000); } if (App.refreshHer) App.refreshHer(); });
-  // ---------- her cycle ----------
-  const pe = { on: $('#peOn'), start: $('#peStart'), cycle: $('#peCycle'), len: $('#peLen'), ann: $('#peAnn') };
+  // ---------- her cycle (set the first date in the She section; after that it is automatic) ----------
+  const pe = { ann: $('#peAnn') };
   const istToday = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
   function cycleText(s) {
     const n = s.periodNow;
-    if (!s.period.enabled) return 'Off. Turn it on and set the first day of her last period.';
-    if (!n) return s.persona.gender === 'boy' ? 'Only Tiny (girl) has period days.' : 'Pick the first day of her last period (today or earlier).';
-    if (n.phase === 'period') return 'Day ' + n.day + ' of ' + n.of + (n.heavy ? ': cramps, tired and cranky today.' : ': pain is milder, still a bit moody.');
+    if (!n) return s.persona.gender === 'boy' ? 'Only Tiny (girl) has period days.' : 'No first date yet. Press "Period started today" once, then it runs by itself.';
+    if (n.phase === 'period') return 'Day ' + n.day + ' of ' + n.of + ', pain level ' + n.pain + '%.';
     if (n.phase === 'pms') return 'PMS days: her period is due in ' + n.left + ' day' + (n.left === 1 ? '' : 's') + '. She is moody and sensitive.';
     return 'Feeling normal. Next period in ' + n.left + ' day' + (n.left === 1 ? '' : 's') + '.';
   }
   function fillCycle(s) {
     const girl = s.persona.gender !== 'boy';
     $('#cycleCard').hidden = !girl;
-    pe.on.checked = s.period.enabled; pe.ann.checked = s.period.announce;
-    if (document.activeElement !== pe.start) pe.start.value = s.period.lastStart || '';
-    if (document.activeElement !== pe.cycle) pe.cycle.value = s.period.cycleLength;
-    if (document.activeElement !== pe.len) pe.len.value = s.period.periodLength;
+    pe.ann.checked = s.period.announce;
     $('#peState').textContent = cycleText(s);
-    const chip = $('#periodChip'), n = s.periodNow;
-    chip.hidden = !(n && n.phase !== 'normal');
-    if (!chip.hidden) chip.lastChild.textContent = n.phase === 'period' ? 'Period day ' + n.day : 'PMS, ' + n.left + 'd to go';
+    $('#peToday').hidden = !!s.period.lastStart;
   }
-  pe.on.addEventListener('change', () => App.saveSettings({ period: { enabled: pe.on.checked, ...(pe.on.checked && !pe.start.value ? { lastStart: istToday() } : {}) } }));
   pe.ann.addEventListener('change', () => App.saveSettings({ period: { announce: pe.ann.checked } }));
-  pe.start.addEventListener('change', () => App.saveSettings({ period: { lastStart: pe.start.value } }));
-  pe.cycle.addEventListener('change', () => App.saveSettings({ period: { cycleLength: +pe.cycle.value } }));
-  pe.len.addEventListener('change', () => App.saveSettings({ period: { periodLength: +pe.len.value } }));
-  $('#peToday').addEventListener('click', async () => { await App.saveSettings({ period: { enabled: true, lastStart: istToday() } }); App.toast('Okay... her period started today. Be nice to her!'); App.flashPose('cry', 4000); });
+  $('#peToday').addEventListener('click', async () => { try { await App.api('/api/she', { body: { action: 'periodStart' } }); await App.saveSettings({}); App.toast('Okay... her period started today. Be nice to her!'); App.flashPose('cry', 4000); } catch (e) { App.toast(e.message); } });
+  $('#peOpen').addEventListener('click', () => App.showView('she'));
   $('#peTest').addEventListener('click', async () => {
     const b = $('#peTest'); b.disabled = true;
     try { await App.api('/api/care/run', { body: { what: 'period' } }); App.toast('Sent. Look at your phone or Telegram, or the Routines chat.', 4500); if (App.refreshRecent) App.refreshRecent(); } catch (e) { App.toast(e.message); }
@@ -103,14 +94,24 @@
 
   // ---------- her feelings: sleep, nakhre, mood chip in the header ----------
   const hrOpts = (sel, from, to) => { for (let h = from; h <= to; h++) { const o = document.createElement('option'); o.value = h; o.textContent = ((h + 11) % 12 + 1) + ':00 ' + (h < 12 ? 'am' : 'pm'); sel.appendChild(o); } };
-  hrOpts($('#slFrom'), 18, 23); hrOpts($('#slTo'), 3, 11); hrOpts($('#brHour'), 5, 11);
+  hrOpts($('#slFrom'), 20, 23); { const o = document.createElement('option'); o.value = '22.5'; o.textContent = '10:30 pm'; const sf = $('#slFrom'); sf.insertBefore(o, sf.children[3]); } hrOpts($('#slTo'), 3, 11); hrOpts($('#brHour'), 5, 11);
   $('#battOn').addEventListener('change', (e) => App.saveSettings({ battery: { enabled: e.target.checked } }).then(() => App.refreshHer && App.refreshHer()));
   $('#battLimit').addEventListener('change', (e) => App.saveSettings({ battery: { limit: +e.target.value } }).then(() => App.refreshHer && App.refreshHer()));
   $('#battMin').addEventListener('change', (e) => App.saveSettings({ battery: { chargeMinutes: +e.target.value } }));
+  $('#diOn').addEventListener('change', (e) => App.saveSettings({ diary: { enabled: e.target.checked } }));
+  $('#ouOn').addEventListener('change', (e) => App.saveSettings({ outfit: { enabled: e.target.checked } }));
   $('#brOn').addEventListener('change', (e) => App.saveSettings({ briefing: { enabled: e.target.checked } }));
   $('#brHour').addEventListener('change', (e) => App.saveSettings({ briefing: { hour: +e.target.value } }));
   let lastHer = null;
+  function paintPeriodChip(v) {
+    const chip = $('#periodChip'), p = v && v.period;
+    chip.hidden = !p; if (!p) return;
+    chip.lastChild.textContent = p.phase === 'period' ? 'Day ' + p.day + ' · ' + p.pain + '%' : p.phase === 'pms' ? 'PMS · ' + p.left + 'd' : 'Next ' + p.left + 'd';
+    chip.style.cursor = 'pointer'; chip.title = 'Open the She section';
+  }
+  $('#periodChip').addEventListener('click', () => App.showView('she'));
   function paintMood(v, life) {
+    paintPeriodChip(v);
     const chip = $('#moodChip'); if (!chip || !v) return;
     const pct = v.forgive != null ? ' ' + v.forgive + '%' : '';
     chip.hidden = false; chip.dataset.k = v.kind; chip.firstChild.textContent = v.emoji; chip.lastChild.textContent = v.label + pct;
@@ -164,10 +165,10 @@
   function fillFeel(s) {
     const girl = s.persona.gender !== 'boy';
     $('#amOn').checked = s.ambient.enabled; if (document.activeElement !== $('#amPlace')) $('#amPlace').value = s.ambient.place;
-    $('#slOn').checked = s.sleep.enabled; $('#slFrom').value = s.sleep.from; $('#slTo').value = s.sleep.to;
+    $('#slOn').checked = s.sleep.enabled; $('#slFrom').value = String(s.sleep.from + (s.sleep.fromMin === 30 ? 0.5 : 0)); $('#slTo').value = s.sleep.to;
     $('#nkOn').checked = s.her.nakhre; $('#nkPer').value = String(s.her.nakhrePerDay); $('#rcOn').checked = s.her.react;
     $('#hrNakhre').hidden = !girl; $('#nkOn').closest('.line-row').hidden = !girl; $('#nkPer').closest('.field').hidden = !girl;
-    $('#sunOn').checked = s.her.sunday !== false; $('#brOn').checked = s.briefing.enabled; { const ba = s.battery || {}; $('#battOn').checked = ba.enabled !== false; $('#battLimit').value = String(ba.limit || 20); $('#battMin').value = String(ba.chargeMinutes || 5); } $('#brHour').value = String(s.briefing.hour);
+    $('#sunOn').checked = s.her.sunday !== false; $('#brOn').checked = s.briefing.enabled; $('#diOn').checked = !s.diary || s.diary.enabled !== false; $('#ouOn').checked = !s.outfit || s.outfit.enabled !== false; { const ba = s.battery || {}; $('#battOn').checked = ba.enabled !== false; $('#battLimit').value = String(ba.limit || 20); $('#battMin').value = String(ba.chargeMinutes || 5); } $('#brHour').value = String(s.briefing.hour);
     $('#prOn').checked = s.her.promises !== false; $('#mxAng').value = String(s.her.maxAngerHours || 12);
     paintMood(s.her_now);
     if (!fillFeel.first) { fillFeel.first = true; App.refreshHer(); if (App.pollSort) App.pollSort(); }
@@ -175,7 +176,7 @@
   $('#amOn').addEventListener('change', (e) => App.saveSettings({ ambient: { enabled: e.target.checked } }));
   $('#amPlace').addEventListener('change', (e) => App.saveSettings({ ambient: { place: e.target.value.trim() || 'Indore' } }));
   $('#slOn').addEventListener('change', (e) => App.saveSettings({ sleep: { enabled: e.target.checked } }));
-  $('#slFrom').addEventListener('change', (e) => App.saveSettings({ sleep: { from: +e.target.value } }));
+  $('#slFrom').addEventListener('change', (e) => App.saveSettings({ sleep: { from: Math.floor(+e.target.value), fromMin: +e.target.value % 1 ? 30 : 0 } }));
   $('#slTo').addEventListener('change', (e) => App.saveSettings({ sleep: { to: +e.target.value } }));
   $('#sunOn').addEventListener('change', (e) => App.saveSettings({ her: { sunday: e.target.checked } }));
   $('#careSunday').addEventListener('click', async () => { try { await App.api('/api/care/run', { body: { what: 'sunday' } }); App.toast('Sent to your Telegram or phone.', 3500); } catch (e) { App.toast(e.message); } });

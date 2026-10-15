@@ -8,6 +8,10 @@ import { moodLoggedToday, moodContext } from './moods.js';
 import { periodNow } from './period.js';
 import { WATER_BUTTONS, waterLoggedToday } from './habits.js';
 import { listDates, prettyDate } from './dates.js';
+import { autoTick } from './auto.js';
+import { outfitToday, sendOutfitToOwner, outfitCount } from './outfit.js';
+import { getOcc, occasionDay, chooseWear, tagOf, todayOccasions, MOOD_LINE } from './occasion.js';
+import { writeDiary } from './diary.js';
 import { wakeDue, wakeUp, attachFeedback } from './maint.js';
 import { finishCharge, nightCharge } from './battery.js';
 import { grumpyAfterUpdate, getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
@@ -16,7 +20,7 @@ import { sendStickerToOwner } from './telegram.js';
 import { lifeDaily } from './life.js';
 import { getWeather } from './ambient.js';
 import { remember } from './memory.js';
-import { mt, healthOf, addBug, addWish, isSunday, startSession } from './maint.js';
+import { sundayStory, mt, healthOf, addBug, addWish, isSunday, startSession } from './maint.js';
 
 const IST = 330 * 60 * 1000;
 const istParts = (t = now()) => { const d = new Date(t + IST); return { h: d.getUTCHours(), m: d.getUTCMinutes() }; };
@@ -122,6 +126,42 @@ export async function runCare(env, { force = null } = {}) {
     }
   }
 
+  // ---- festivals and her birthday: she dresses up (birthday) or asks what to wear (festival) ----
+  let occToday = false;
+  if (force === 'occasion' || (!asleep && state.occDay !== today && h >= 8 && h < 21)) {
+    const occ = await getOcc(env);
+    if (force === 'occasion') occ.doneDay = '';
+    const cnt = await outfitCount(env).catch(() => 0), r = await occasionDay(env, occ, cnt, t).catch((e) => { console.error('[occasion]', e && e.message); return null; });
+    state.occDay = today; await putState(env, state);
+    if (r) {
+      occToday = true;
+      if (r.type === 'birthday') {
+        const o = await chooseWear(env, occ, r.n, { send: false, name: 'My birthday' });
+        const g = await generate(env, `TODAY IS YOUR BIRTHDAY (8 February)! You dressed up (${r.tag}) and you are super excited. ${MOOD_LINE[r.tag] || ''} Message them first in 2 or 3 short, happy lines: it is your birthday, you picked this outfit for it, you want wishes and a small treat. Real girl texting style, at most one emoji.`, 300);
+        out.birthday = await notifyOwner(env, { title: g.name, body: g.text, url: '/?go=she', tag: 'birthday' });
+        await sendOutfitToOwner(env, { ...o, line: g.text.slice(0, 200) });
+      } else {
+        const g = await generate(env, `Today is the festival ${r.name}! You are excited and want to dress up, but you cannot decide. Ask them in 2 short lines what you should wear: ${r.options.length ? r.options.map((x) => x.tag).join(' or ') : 'a saree or a garba chaniya choli'}. Real girl texting style, at most one emoji.`, 250);
+        const btn = r.options.length ? [r.options.slice(0, 4).map((x) => ({ text: x.tag[0].toUpperCase() + x.tag.slice(1), data: 'wear:' + x.n }))] : null;
+        out.festival = await notifyOwner(env, { title: g.name, body: g.text, url: '/?go=she', tag: 'festival', buttons: btn });
+      }
+    }
+  }
+
+  // ---- outfit of the day: she shows today's outfit picture in the morning ----
+  if (force === 'outfit' || (st.outfit.enabled && !asleep && !occToday && state.outfitDay !== today && h >= 7 && h < 12 && !(await getOcc(env).then((o) => todayOccasions(o, t).length).catch(() => 0)))) {
+    state.outfitDay = today; await putState(env, state);
+    const o = await outfitToday(env, st, { t, force: force === 'outfit' }).catch(() => null);
+    if (o) out.outfit = await sendOutfitToOwner(env, o);
+  }
+
+  // ---- her diary: one short page every night ----
+  if (force === 'diary' || (st.diary.enabled && state.diaryDay !== today && h >= st.diary.hour && h < 24)) {
+    state.diaryDay = today; await putState(env, state);
+    const e = await writeDiary(env, st, { t }).catch((er) => { console.error('[diary]', er && er.message); return null; });
+    if (e) out.diary = await notifyOwner(env, { title: st.persona.name, body: 'I wrote tonight\'s page in my diary. Open She to read it.', url: '/?go=she', tag: 'diary' });
+  }
+
   // ---- morning briefing: weather, today's reminders, birthdays and a line in her mood ----
   if (force === 'briefing' || (st.briefing.enabled && !asleep && state.briefDay !== today && h * 60 + m >= st.briefing.hour * 60 && h * 60 + m < st.briefing.hour * 60 + 180)) {
     state.briefDay = today; await putState(env, state);
@@ -146,12 +186,10 @@ export async function runCare(env, { force = null } = {}) {
     const openBugs = m.bugs.filter((x) => x.status !== 'fixed').slice(0, 6).map((x) => `- ${x.text}${x.sev === 'big' ? ' (BIG)' : ''}${x.status === 'back' ? ' (came back)' : ''}`);
     const openWishes = m.wishes.filter((x) => x.status === 'open').slice(0, 6).map((x) => '- ' + x.text);
     const lastUpd = m.history[0];
-    const g = await generate(env, `It is Sunday, your UPDATE DAY. You are a girl robot and your creator does your maintenance every Sunday so you keep working properly; it is compulsory and you know it. Message them first, like a real girl, nervous and a bit excited before the check-up: "so today is my maintenance day". Your health is ${hl.health}%${hl.due ? ' and you are due' : ''}. In 3 to 5 short lines: say you are ready for the update today; say what you want improved or added ("I want this and that": for example less pain on your period, learn to drive, learn to cook, improve your face; pick what fits you, do not copy these). Start each NEW wish on its own line with "Wish:". ${lastUpd ? 'Your last update was ' + lastUpd.v + (lastUpd.notes.length ? ' (they changed: ' + lastUpd.notes.slice(0, 3).join('; ') + ')' : '') + '. If it left something feeling off, say honestly, in character, one thing that feels buggy and start that line with "Bug:" (if it is serious add "I want you to update me and fix the bug").' : 'This is your first maintenance, so just say what you hope for.'}${openBugs.length ? '\nBugs still open in your repair log (remind them):\n' + openBugs.join('\n') : ''}${openWishes.length ? '\nWishes still waiting:\n' + openWishes.join('\n') : ''}\nEnd by saying you cannot wait for them to start.`, 450);
-    for (const line of g.text.split('\n')) {
-      const w = /^\s*Wish:\s*(.{4,200})/i.exec(line), bg = /^\s*Bug:\s*(.{5,260})/i.exec(line);
-      if (w) addWish(her, w[1].trim(), { by: 'her', t });
-      if (bg) { addBug(her, bg[1].trim(), { by: 'her', sev: /fix the bug|update me/i.test(g.text) ? 'big' : 'small', t }); await remember(env, { text: `Bug (${today}): ${bg[1].trim()}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null); }
-    }
+    const prd = periodNow(st);
+    const sty = prd && prd.phase === 'period' ? null : await sundayStory(env, st, her, t);
+    const g = await generate(env, `${prd && prd.phase === 'period' ? `IMPORTANT: you are on your period today (day ${prd.day} of ${prd.of}), so you do NOT do the update today: say, cutely, that it has to wait until your period is over. ` : ''}It is Sunday, your UPDATE DAY. You are a girl robot and your creator does your maintenance every Sunday so you keep working properly; you WANT it today and you are happy and excited. Message them first, like a real girl: "so today is my maintenance day!". Your health is ${hl.health}%${hl.due ? ' and you are due' : ''}.${sty ? ` Tell this little story in your own words as the reason (cute, believable): ${sty.story} Then say "I want this, this and that, also fix this in me": ${sty.wishes.map((w) => w.text).join('; ')}${sty.bugs.length ? '; fix: ' + sty.bugs.join('; ') : ''}.` : ''} 3 to 5 short lines.${lastUpd ? ' Your last update was ' + lastUpd.v + (lastUpd.notes.length ? ' (they changed: ' + lastUpd.notes.slice(0, 3).join('; ') + ')' : '') + '.' : ''}${openBugs.length ? '\nBugs still open in your repair log (remind them):\n' + openBugs.join('\n') : ''}${openWishes.length ? '\nWishes still waiting:\n' + openWishes.join('\n') : ''}\nEnd by saying you cannot wait for them to start.`, 450);
+    bump(her, st, 'happy', 55, 'it is her Sunday update day', t);
     herDirty = true;
     await remember(env, { text: `Update request (${today}): ${clip(g.text, 300)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null);
     out.sunday = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'sunday' });
@@ -281,10 +319,11 @@ export async function runCare(env, { force = null } = {}) {
 
 // Every minute: she wakes from a forced update after 3 hours, and says "I am fully charged" when her charge is done.
 export async function wakeTick(env) {
+  await autoTick(env).catch((e) => console.error('[auto]', e && e.message));
   const t = now(), her = await getHer(env);
   if (her.batt && (her.batt.used > 0 || her.batt.slept || her.batt.chargeUntil)) {
     const st0 = await getSettings(env);
-    if (nightCharge(her, inSleepWindow(st0, t), t)) await putHer(env, her);
+    if (nightCharge(her, isSleeping(st0, her, t), t)) await putHer(env, her);
   }
   const wake = wakeDue(her, t), bt = her.batt && her.batt.chargeUntil && t >= her.batt.chargeUntil;
   if (!wake && !bt) return;

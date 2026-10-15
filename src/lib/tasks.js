@@ -4,7 +4,7 @@
 import { uid, now, clip, parseJsonLoose, istNice } from './util.js';
 import { complete } from './ai.js';
 import { prepareChat, finishChat } from './chat.js';
-import { notifyOwner } from './notify.js';
+import { notifyOwner, asleepNow } from './notify.js';
 
 export const ROUTINES_CONV = 'routines';
 
@@ -58,6 +58,7 @@ async function finish(env, task, result) {
 }
 
 export async function runDueTasks(env) {
+  if (await asleepNow(env)) return 0;                    // she is asleep: reminders wait and run when she wakes up
   const due = await env.DB.prepare('SELECT * FROM tasks WHERE enabled=1 AND run_at<=? ORDER BY run_at LIMIT 10').bind(now()).all().then((r) => r.results || []);
   for (const task of due) {
     // Move the clock first so a slow run never fires twice.

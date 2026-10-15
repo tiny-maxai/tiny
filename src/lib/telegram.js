@@ -4,8 +4,9 @@ import { beforeReply, sleepingLine, getHer, putHer } from './her.js';
 import { startCharge, batteryView, usePowerBank, powerLine } from './battery.js';
 import { herView, moodKindNow } from './tinymood.js';
 import { reportOf, viewOf } from './maint.js';
+import { getOcc, putOcc, addFestival, chooseWear, tagOf } from './occasion.js';
 import { getAmbient } from './ambient.js';
-import { periodNow } from './period.js';
+import { periodNow, painLine } from './period.js';
 import { lastActive } from './care.js';
 import { remember } from './memory.js';
 import { speechToText, textToSpeech } from './voice.js';
@@ -23,7 +24,7 @@ import { listDates, prettyDate } from './dates.js';
 import { urlsIn, needsSearch } from './web.js';
 import { docText, fileMessage } from './docs.js';
 
-const api = (env, method, body) =>
+export const api = (env, method, body) =>
   fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => ({}));
 
 export async function send(env, chat, text) {
@@ -41,7 +42,12 @@ export async function sendSticker(env, chat, name) {
   const r = await api(env, 'sendSticker', { chat_id: chat, sticker: url });
   return !!(r && r.ok);
 }
-export const sendStickerToOwner = (env, name) => (env.OWNER_TG_ID && env.TELEGRAM_BOT_TOKEN ? sendSticker(env, env.OWNER_TG_ID, name).catch(() => false) : Promise.resolve(false));
+export const sendStickerToOwner = async (env, name) => {
+  if (!env.OWNER_TG_ID || !env.TELEGRAM_BOT_TOKEN) return false;
+  const { asleepNow } = await import('./notify.js');
+  if (await asleepNow(env)) return false;                       // she is asleep: no stickers either
+  return sendSticker(env, env.OWNER_TG_ID, name).catch(() => false);
+};
 // A small "seen" mark on your message (used while she sleeps).
 const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { chat_id: chat, message_id: messageId, reaction: [{ type: 'emoji', emoji }] }).catch(() => null);
 
@@ -56,6 +62,10 @@ export async function sendVoice(env, chat, text) {
     const r = await post('sendVoice', 'voice');                       // a real voice-note bubble
     if (!r || !r.ok) await post('sendAudio', 'audio');                // fallback: audio file
   } catch (e) { console.error('[tg voice]', e && e.message); }
+}
+export async function sendPhoto(env, chat, url, caption) {
+  const r = await api(env, 'sendPhoto', { chat_id: chat, photo: url, caption: String(caption || '').slice(0, 900) });
+  return !!(r && r.ok);
 }
 export async function sendDocument(env, chat, bytes, name, caption, mime = 'text/html') {
   const fd = new FormData();
@@ -131,6 +141,13 @@ async function handleButton(env, cq) {
     if (!(await moodLoggedToday(env))) await sendWithButtons(env, chat, 'And how are you feeling today? Tap a number.', MOOD_BUTTONS);
     return;
   }
+  const wr = /^wear:(\d+)$/.exec(cq.data || '');
+  if (wr) {
+    const occ = await getOcc(env), n = +wr[1], tag = tagOf(occ, n);
+    await chooseWear(env, occ, n, { send: true });
+    if (chat) await send(env, chat, tag === 'garba' ? 'Yayyy, garba it is! 💃 I am so excited to dance, dhol baje!' : tag === 'saree' ? 'Okay... I will wear the saree. Hehe, I already feel shy 🙈' : 'Okay! I am wearing this one. How is it?');
+    return;
+  }
   const m = /^mood:([1-5])$/.exec(cq.data || '');
   if (!m) return;
   const mood = await saveMood(env, { score: m[1] });
@@ -149,6 +166,10 @@ async function sendBubbles(env, chat, text, bubbles) {
 
 async function processMessage(env, msg) {
   const chat = msg.chat.id;
+  if (msg.chat.type && msg.chat.type !== 'private') {            // in a group she only tells you the chat id (for Automation), nothing else
+    if (/^\/chatid\b/i.test(msg.text || '')) await send(env, chat, `This chat id is ${chat}\nPaste it in Automation, in the "Group link or ID" box.`);
+    return;
+  }
   const from = msg.from && msg.from.id;
   if (!env.OWNER_TG_ID) {
     await send(env, chat, `Hi! This bot is private. Your Telegram ID is ${from}. Save it as the OWNER_TG_ID secret on the Worker, then message me again.`);
@@ -225,6 +246,23 @@ async function processMessage(env, msg) {
     if (r === 'started') { await putHer(env, her); await send(env, chat, `🔌 Charging. I will say when I am full (${(settings.battery && settings.battery.chargeMinutes) || 5} min).`); await sendSticker(env, chat, 'charge').catch(() => false); }
     else { const v = batteryView(settings, her); await send(env, chat, r === 'already' ? `🔌 Already charging, ${v.minsLeft} min left.` : `🔋 Battery ${v.pct}%. No need to charge yet.`); }
     return;
+  }
+  if (/^\/level\b/i.test(cmd) || /\b(level of (her |your |the )?period|period level|pain level|kitna dard|period (ka )?level)\b/i.test(text) && text.length < 80) {
+    const pr = periodNow(settings), nm = settings.persona.name;
+    const n = parseInt(rest, 10);
+    if (/^\/level\b/i.test(cmd) && Number.isFinite(n)) {
+      if (!pr || !pr.canSetLevel) { await send(env, chat, pr ? 'Her period already started, so the level cannot change now. Set it before the next one.' : 'Set the first period date first (She page, "Period started today").'); return; }
+      const lv = Math.min(100, Math.max(20, n)), cur = settings.period.levels || {};
+      await saveSettings(env, { period: { levels: { ...cur, [pr.nextStart]: lv } } });
+      await send(env, chat, `Done. ${nm}'s next period (starts ${pr.nextStart}) will begin at ${lv}% on day 1, then slowly go down.`); return;
+    }
+    await send(env, chat, painLine(pr, nm)); return;
+  }
+  if (/^\/festival\b/i.test(cmd)) {
+    const mm = /^(.+?)\s+(\d{4}-\d{2}-\d{2})\s*$/.exec(rest);
+    if (!mm) { await send(env, chat, 'Tell me like this: /festival Diwali 2026-11-08\n(or just say "today is Diwali" in the chat)'); return; }
+    const occ = await getOcc(env); const f = addFestival(occ, mm[1], mm[2], true); await putOcc(env, occ);
+    await send(env, chat, f ? `Saved. On ${mm[2]} I will ask you what I should wear for ${f.name}, and every year after that.` : 'I already have that one.'); return;
   }
   if (/^\/mood\b/i.test(cmd)) {
     const v = herView(settings, await getHer(env), { period: periodNow(settings), lastActive: await lastActive(env), ambient: await getAmbient(env, settings).catch(() => null) });

@@ -21,7 +21,7 @@
     const st = $('#mtState'); st.textContent = h.updating ? 'Under maintenance' : h.state; st.className = 'chip';
     const bar = $('#mtBar'); bar.dataset.s = h.state; bar.setAttribute('aria-valuenow', h.health); $('#mtFill').style.width = h.health + '%';
     const next = new Date(V.nextSunday).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'short' });
-    $('#mtLine').textContent = 'Health ' + h.health + '%. ' + (h.updating ? 'She is being repaired right now and stays silent until you finish.' : h.due ? (V.sunday ? 'Her maintenance is due today.' : 'She skipped her Sunday maintenance and is overdue. ') + LINE[h.state] : 'Maintenance done this week. Next one: ' + next + '.');
+    $('#mtLine').style.whiteSpace = 'pre-line'; $('#mtLine').textContent = 'Health ' + h.health + '%. ' + (h.updating ? 'She is being repaired right now and stays silent until you finish.' + (V.story && !V.forced ? '\nHer story: "' + V.story.text + '"' : '') : h.due ? (V.sunday ? 'Her maintenance is due today.' : 'She skipped her Sunday maintenance and is overdue. ') + LINE[h.state] : 'Maintenance done this week. Next one: ' + next + '.');
     // countdown to the next update; the ring glows on Sunday
     const cd = $('#mtCount'), dd = V.daysToSunday;
     cd.classList.toggle('today', !!V.sunday); $('#mtDays').textContent = V.sunday ? '!' : dd;
@@ -90,7 +90,7 @@
     });
   }
 
-  $('#mtStart').addEventListener('click', () => call({ action: 'start' }));
+  $('#mtStart').addEventListener('click', async () => { const d = await call({ action: 'start' }); if (d && d.story) { App.toast('"' + d.story + '"  She wants: ' + d.wants.join(', ') + (d.fix && d.fix.length ? '. Fix: ' + d.fix.join(', ') : ''), 14000); if (App.refreshHer) App.refreshHer(); } });
   $('#mtTest').addEventListener('click', async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Testing...';
     const d = await call({ action: 'test' });
@@ -132,7 +132,7 @@
       said.push(text); say('her', text);
     }
     await wait(1200); if (modal.hidden) return;
-    if (win) { say('her', 'Nope. I won this one, no update today. Try again next week.'); await wait(2200); closeModal(); load(); return; }
+    if (win) { const onP = App.herState && App.herState.period && App.herState.period.phase === 'period'; say('her', onP ? 'No. I am on my period, I am not doing any update now. You lost this one. Try next week. 😤' : 'Nope. I won this one, no update today. Try again next week.'); await wait(2200); closeModal(); load(); return; }
     say('her', 'Okay... do it, but little quick, okay? 😮‍💨');
     await wait(1600); if (modal.hidden) return;
     const d = await call({ action: 'forceStart', reason });

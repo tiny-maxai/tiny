@@ -36,7 +36,7 @@
   let personaReady = false;
   function setSeg(id, val) { $$('#' + id + ' button').forEach((b) => b.classList.toggle('on', b.dataset.v === val)); }
   function fillPersona(s) {
-    setSeg('segGender', s.persona.gender); setSeg('segVibe', s.persona.vibe); setSeg('segLang', s.persona.language); setSeg('segBrain', s.brain); setSeg('segVGirl', s.voice.girl); setSeg('segVBoy', s.voice.boy);
+    setSeg('segGender', s.persona.gender); setSeg('segUser', s.userGender || 'boy'); setSeg('segVibe', s.persona.vibe); setSeg('segLang', s.persona.language); setSeg('segBrain', s.brain); setSeg('segVGirl', s.voice.girl); setSeg('segVBoy', s.voice.boy);
     if (document.activeElement !== $('#pName')) $('#pName').value = s.persona.name;
     if (document.activeElement !== $('#uName')) $('#uName').value = s.userName;
     if (document.activeElement !== $('#pCustom')) $('#pCustom').value = s.persona.custom;
@@ -47,6 +47,7 @@
     if (personaReady) return; personaReady = true;
     const seg = (id, fn) => $('#' + id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) fn(b.dataset.v); });
     seg('segGender', (v) => { const wasDefault = ['Tiny', 'Byte'].includes(App.settings.persona.name); App.saveSettings({ persona: { gender: v, ...(wasDefault ? { name: v === 'boy' ? 'Byte' : 'Tiny' } : {}) } }).then(() => App.swapCharacter()); });
+    seg('segUser', (v) => App.saveSettings({ userGender: v }));
     seg('segVibe', (v) => App.saveSettings({ persona: { vibe: v } }));
     seg('segVGirl', (v) => App.saveSettings({ voice: { girl: v } }).then(() => $('#vTest').click()));
     seg('segVBoy', (v) => App.saveSettings({ voice: { boy: v } }).then(() => $('#vTest').click()));

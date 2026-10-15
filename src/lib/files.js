@@ -2,7 +2,22 @@
 import { complete } from './ai.js';
 import { markdownToDocx, csvToXlsx } from './office.js';
 
-const STYLE = `Style (always, unless the person names other colours): ONLY blue and white. White (#FFFFFF) page background, one blue accent #573AFC with its pale tint #EEEAFF for soft areas and a deep blue #1B2559 for text. No other colours at all (no purple, pink, green, orange, red, grey-black or gradients), no dark mode, no footer. Rounded 24px cards with soft blue-tinted shadows, pill buttons, Inter font from Google Fonts (weights 400, 600, 700), clean and minimal, no emoji (use small inline SVG icons in blue instead).`;
+const FOOT_TEXT = 'by wondermayank.in';
+const STYLE = `Design (ALWAYS, exactly like the app's own UI): blue and white only. Start from this base and keep its tokens:
+:root{--blue:#573AFC;--tint:#EEEAFF;--ink:#1B2559;--muted:#5B6490;--line:#E3DEFF}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font-family:'Inter',system-ui,sans-serif;line-height:1.55}
+.wrap{max-width:960px;margin:0 auto;padding:20px 16px}
+header.bar{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;gap:10px;font-weight:700}
+.card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 12px 32px rgba(87,58,252,.10),0 2px 6px rgba(87,58,252,.06)}
+.btn{background:var(--blue);color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:600;font-size:15px;cursor:pointer;box-shadow:0 8px 20px rgba(87,58,252,.28)}
+.btn.ghost{background:var(--tint);color:var(--blue);box-shadow:none}
+h1,h2,h3{color:var(--ink);line-height:1.2} a{color:var(--blue)}
+Rules: white page, flat #573AFC accent with its tint #EEEAFF, deep blue #1B2559 text. NO other colours (no purple, pink, green, orange, red, black, grey backgrounds), no gradients, no dark mode. Rounded 24px cards, pill buttons, soft blue shadows, a clean header bar with the page title, generous spacing, Inter from Google Fonts (400, 600, 700), mobile friendly. No emoji (use small inline SVG icons in #573AFC). The page MUST end with this footer as the last thing inside <body>: <footer style="text-align:center;padding:24px 16px;color:#5B6490;font-size:13px">${FOOT_TEXT.replace('by ', 'by <a href="https://wondermayank.in" style="color:#573AFC;font-weight:600;text-decoration:none">') + '</a>'}</footer>`;// Every file she makes ends with "by wondermayank.in".
+const FOOTER_HTML = '<footer style="text-align:center;padding:24px 16px;color:#5B6490;font-size:13px;font-family:Inter,system-ui,sans-serif">by <a href="https://wondermayank.in" style="color:#573AFC;font-weight:600;text-decoration:none">wondermayank.in</a></footer>';
+export function brandHtml(h) {
+  if (/wondermayank\.in/i.test(h.slice(-1500))) return h;
+  return /<\/body>/i.test(h) ? h.replace(/<\/body>/i, FOOTER_HTML + '\n</body>') : h + '\n' + FOOTER_HTML;
+}
 const MAKE = '(make|create|build|generate|write|prepare|bana\\w*|de|do)';
 
 // Which kind of file does this message ask for? null = none.
@@ -72,6 +87,7 @@ export function makePdf(md) {
     y -= (it.after || 0);
   }
   pages.push(cur);
+  pages.forEach((p) => p.push(`BT /F1 9 Tf 0.341 0.227 0.988 rg ${M} 28 Td (${FOOT_TEXT}) Tj ET`));
   const objs = [];
   const n = pages.length;
   objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
@@ -113,12 +129,12 @@ export async function makeFile(env, kind, request, extra = '', nameHint = '', an
     ],
   });
   let bytes;
-  if (kind === 'html') { const h = cleanHtml(r.text); if (!h) throw new Error('I could not build that page. Try describing it a bit more.'); bytes = new TextEncoder().encode(h); }
+  if (kind === 'html') { const h = cleanHtml(r.text); if (!h) throw new Error('I could not build that page. Try describing it a bit more.'); bytes = new TextEncoder().encode(brandHtml(h)); }
   else if (kind === 'pdf') { bytes = makePdf(unfence(r.text, 'markdown|md')); }
-  else if (kind === 'csv') { const c = unfence(r.text, 'csv'); if (!c.includes(',')) throw new Error('I could not build that table. Try describing the columns.'); bytes = new TextEncoder().encode('﻿' + c + '\n'); }
-  else if (kind === 'docx') bytes = await markdownToDocx(unfence(r.text, 'markdown|md'));
-  else if (kind === 'xlsx') { const c = unfence(r.text, 'csv'); if (!c.includes(',')) throw new Error('I could not build that sheet. Try describing the columns.'); bytes = await csvToXlsx(c, 'Sheet1'); }
-  else bytes = new TextEncoder().encode(unfence(r.text, 'markdown|md') + '\n');
+  else if (kind === 'csv') { const c = unfence(r.text, 'csv'); if (!c.includes(',')) throw new Error('I could not build that table. Try describing the columns.'); bytes = new TextEncoder().encode('﻿' + c + '\n' + FOOT_TEXT + '\n'); }
+  else if (kind === 'docx') bytes = await markdownToDocx(unfence(r.text, 'markdown|md') + '\n\n' + FOOT_TEXT);
+  else if (kind === 'xlsx') { const c = unfence(r.text, 'csv'); if (!c.includes(',')) throw new Error('I could not build that sheet. Try describing the columns.'); bytes = await csvToXlsx(c + '\n' + FOOT_TEXT, 'Sheet1'); }
+  else bytes = new TextEncoder().encode(unfence(r.text, 'markdown|md') + '\n\n---\nby [wondermayank.in](https://wondermayank.in)\n');
   return { bytes, kind, name: fileName(nameHint || request, EXT[kind]), mime: MIME[kind], model: r.model };
 }
 

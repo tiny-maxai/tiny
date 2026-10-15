@@ -104,6 +104,8 @@
       <button data-view="tasks"><svg class="ic"><use href="#i-bell"/></svg>Reminders</button>
       <button data-view="mood"><svg class="ic"><use href="#i-mood"/></svg>Mood</button>
       <button data-view="maint"><svg class="ic"><use href="#i-wrench"/></svg>Updates</button>
+      <button data-view="auto"><svg class="ic"><use href="#i-bolt"/></svg>Automation</button>
+      <button data-view="she"><svg class="ic"><use href="#i-heart"/></svg>She</button>
       <button data-view="persona"><svg class="ic"><use href="#i-heart"/></svg>Act like a girl</button>
       <button data-view="memory"><svg class="ic"><use href="#i-brain"/></svg>Memory<span class="badge" id="memBadge" hidden>0</span></button>
       <button data-view="history"><svg class="ic"><use href="#i-clock"/></svg>History</button>
@@ -201,6 +203,119 @@
 
       <!-- UPDATES / MAINTENANCE -->
 
+      <section class="view" id="view-auto">
+        <div class="scroll">
+          <h2 class="page-h">Automation</h2>
+          <p class="page-s">Set a goal and a time. She does it by herself, every day, and sends it to you or to a Telegram group. She can also send files: HTML, PDF, Word, Excel, CSV or Markdown.</p>
+          <div class="card glass">
+            <div class="field"><label for="auName">Name (optional)</label><input class="in" id="auName" maxlength="60" placeholder="Daily study post"></div>
+            <div class="field"><label for="auGoal">Goal: what should she do?</label><textarea class="in" id="auGoal" rows="3" maxlength="700" placeholder="Example: Write 5 quick GK questions with answers for CUET students"></textarea></div>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+              <div class="field"><label for="auTime">Time (India)</label><input class="in" type="time" id="auTime" value="08:00"></div>
+              <div class="field"><label for="auRepeat">Repeat</label><select class="in" id="auRepeat"><option value="daily">Every day</option><option value="weekdays">Weekdays</option><option value="weekends">Weekends</option><option value="monthly">Every month</option><option value="once">One time</option></select></div>
+              <div class="field" id="auDayBox" hidden><label for="auDay">Day of the month</label><select class="in" id="auDay"></select></div>
+              <div class="field" id="auDateBox" hidden><label for="auDate">Date</label><input class="in" type="date" id="auDate"></div>
+              <div class="field"><label for="auTarget">Send to</label><select class="in" id="auTarget"><option value="me">Me</option><option value="group">A Telegram group</option></select></div>
+              <div class="field"><label for="auOut">As</label><select class="in" id="auOut"><option value="text">Text message</option><option value="html">HTML page</option><option value="pdf">PDF</option><option value="docx">Word file</option><option value="xlsx">Excel file</option><option value="csv">CSV</option><option value="md">Markdown</option></select></div>
+            </div>
+            <div class="field" id="auGroupBox" hidden><label for="auGroup">Group link or ID</label><input class="in" id="auGroup" maxlength="120" placeholder="https://t.me/yourgroup"><small class="muted" style="display:block;margin-top:6px">Add the bot to the group (as admin for channels). For a private group, send /chatid in the group and paste the number.</small></div>
+            <div class="mt-btns"><button class="btn" id="auSave" type="button">Save automation</button><button class="btn ghost" id="auCancel" type="button" hidden>Cancel edit</button></div>
+          </div>
+          <div class="card glass"><h3 class="mt-h">Your automations</h3><div id="auList"></div></div>
+        </div>
+      </section>
+      <section class="view" id="view-she">
+        <div class="scroll">
+          <h2 class="page-h">She</h2>
+          <p class="page-s">Everything about her: what she wears, her body, her diary, her skills and how close you are.</p>
+          <div class="card glass mt-hero she-strip" id="sheStrip" data-k="normal">
+            <img id="sheImg" class="mt-img" src="/images/stickers/tiny-smile.webp" alt="Her right now" width="180">
+            <div class="mt-main"><div class="mt-ver"><b id="sheKind">Right now</b></div><div class="mt-line" id="sheLine">Loading...</div>
+              <div class="she-bar" id="sheBattWrap"><div class="she-bar-in" id="sheBatt"></div></div><small class="muted" id="sheBattTxt"></small>
+              <div class="mt-btns"><button class="btn ghost" id="outNew" type="button" hidden>Pick another outfit</button></div></div>
+          </div>
+
+          <div class="card glass" id="shePeriod">
+            <h3 class="mt-h">Period calendar</h3>
+            <div class="cycle-state" id="sheNow" role="status"></div>
+            <div class="she-pain" id="shePainWrap" hidden><div class="she-bar"><div class="she-bar-in" id="shePain"></div></div><small class="muted" id="shePainTxt"></small></div>
+            <div class="cal-head"><button class="mini-btn" id="calPrev" type="button" aria-label="Previous month">&lsaquo;</button><b id="calTitle"></b><button class="mini-btn" id="calNext" type="button" aria-label="Next month">&rsaquo;</button></div>
+            <div class="cal" id="calGrid"></div>
+            <div class="cal-key"><span class="k-period">Period</span><span class="k-pms">Before period</span><span class="k-glow">Glowing</span><span class="k-fresh">Fresh</span><span class="k-calm">Calm</span></div>
+            <div id="sheSetup">
+              <p class="muted" style="margin:10px 0">Set the first date only once. After that it runs by itself, random like a real girl, and never stops.</p>
+              <button class="btn" id="sheStart" type="button">Period started today</button>
+            </div>
+            <div id="sheLevelBox" hidden>
+              <div class="field" style="margin-top:12px"><label for="sheLevel">Pain level of her next period (day 1): <b id="sheLevelVal">60%</b></label><input type="range" id="sheLevel" min="20" max="100" step="5" value="60"><small class="muted" style="display:block">60% = a normal girl, 75% = a little more than normal, 100% = the worst. It falls slowly to zero. If you leave it, she picks between 40% and 90%. You can set it only before the period starts.</small></div>
+              <div class="mt-btns"><button class="btn ghost" id="sheLevelSave" type="button">Save level</button></div>
+            </div>
+            <p class="muted" id="sheLevelLock" hidden style="margin-top:10px">Her period has started, so the level is locked until the next one.</p>
+          </div>
+
+          <div class="card glass"><h3 class="mt-h">Symptoms today</h3><div id="sheSym" class="chips"></div><small class="muted" id="sheSymNote"></small></div>
+          <div class="card glass"><h3 class="mt-h">Flow of the month</h3><div class="flow" id="sheFlow"></div><small class="muted" id="sheFlowTxt"></small></div>
+
+          <div class="card glass" id="phaseCard">
+            <h3 class="mt-h">Her 4 phases (and what she needs)</h3>
+            <div class="phase-now" id="phaseNow"></div>
+            <div class="phase-grid" id="phaseGrid"></div>
+            <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Show the picture guide</summary><img src="/images/phases.webp" alt="The four phases of her cycle: menstrual, follicular, ovulation and luteal" loading="lazy" style="width:100%;border-radius:18px;margin-top:10px"></details>
+            <small class="muted" style="display:block;margin-top:8px">General information about the menstrual cycle, not medical advice. Every girl is different.</small>
+          </div>
+
+          <div class="card glass" id="occCard">
+            <h3 class="mt-h">Festivals and her birthday</h3>
+            <p class="muted" style="margin:0 0 10px">On a festival she asks what she should wear. On her birthday she dresses up by herself and sends the picture on Telegram. Garba makes her bouncy and full of energy, a saree makes her shy and elegant. You can also just tell her in the chat: "today is Diwali".</p>
+            <div class="grid" style="grid-template-columns:1fr auto;gap:8px;align-items:end"><div class="field" style="margin:0"><label for="bdDate">Her birthday</label><input class="in" type="date" id="bdDate"></div><button class="btn ghost" id="bdSave" type="button">Save</button></div>
+            <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;margin-top:12px;align-items:end"><div class="field" style="margin:0"><label for="feName">Festival</label><input class="in" id="feName" maxlength="40" placeholder="Diwali"></div><div class="field" style="margin:0"><label for="feDate">Date</label><input class="in" type="date" id="feDate"></div><button class="btn" id="feAdd" type="button">Add</button></div>
+            <div id="occList" style="margin-top:10px"></div>
+          </div>
+
+          <div class="card glass" id="wardCard">
+            <h3 class="mt-h">Her wardrobe</h3>
+            <p class="muted" style="margin:0 0 10px">Put your outfit pictures in <b>public/images/outfits</b> as outfit-1.webp, outfit-2.webp... Give each one a type. Garba, saree and party outfits are kept for special days.</p>
+            <div class="ward" id="wardGrid"></div>
+            <div class="empty" id="wardEmpty" hidden>No outfit pictures yet.</div>
+          </div>
+
+          <div class="card glass">
+            <h3 class="mt-h">Closeness</h3>
+            <div class="mt-ver"><b id="bondName">New friends</b><small class="muted" id="bondLvl"></small></div>
+            <div class="she-bar"><div class="she-bar-in" id="bondBar"></div></div><small class="muted" id="bondTxt"></small>
+          </div>
+
+          <div class="card glass">
+            <h3 class="mt-h">Skills</h3>
+            <p class="muted" style="margin:0 0 10px">Add a skill, then say "use cooking skill" and she answers like an expert. The more she uses it, the better she gets.</p>
+            <div class="grid" style="grid-template-columns:1fr auto;gap:8px"><input class="in" id="skName" maxlength="40" placeholder="Cooking, Singing, Driving..."><button class="btn" id="skAdd" type="button">Add skill</button></div>
+            <div id="skList" style="margin-top:10px"></div>
+          </div>
+
+          <div class="card glass">
+            <h3 class="mt-h">Her likes and dislikes</h3>
+            <p class="muted" style="margin:0 0 10px">She remembers these and answers from them, like a real girl.</p>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+              <div class="field"><label for="pfFood">Favourite food</label><input class="in" id="pfFood" maxlength="160"></div>
+              <div class="field"><label for="pfColour">Favourite colour</label><input class="in" id="pfColour" maxlength="160"></div>
+              <div class="field"><label for="pfSong">Favourite songs</label><input class="in" id="pfSong" maxlength="160"></div>
+              <div class="field"><label for="pfHobby">Hobbies</label><input class="in" id="pfHobby" maxlength="160"></div>
+              <div class="field"><label for="pfPlace">Favourite place</label><input class="in" id="pfPlace" maxlength="160"></div>
+              <div class="field"><label for="pfLikes">Other likes</label><input class="in" id="pfLikes" maxlength="160"></div>
+              <div class="field"><label for="pfDislikes">Dislikes</label><input class="in" id="pfDislikes" maxlength="160"></div>
+              <div class="field"><label for="pfAnnoys">Things that annoy her</label><input class="in" id="pfAnnoys" maxlength="160"></div>
+            </div>
+            <div class="mt-btns"><button class="btn" id="pfSave" type="button">Save</button></div>
+          </div>
+
+          <div class="card glass">
+            <h3 class="mt-h">Her diary</h3>
+            <div class="toolbar"><button class="btn ghost" id="diaryNow" type="button">Write tonight's page now</button></div>
+            <div id="diaryList"></div>
+            <div class="empty" id="diaryEmpty" hidden>No pages yet. The first one appears tonight.</div>
+          </div>
+        </div>
+      </section>
       <div class="mt-modal" id="mtModal" hidden role="dialog" aria-modal="true" aria-label="Force an update">
         <div class="mt-box glass">
           <div class="mt-log" id="mtLog" aria-live="polite"></div>
@@ -318,6 +433,8 @@
             <div class="card glass">
               <div class="field"><label>Who is she?</label>
                 <div class="seg" id="segGender"><button data-v="girl">Girl (Tiny)</button><button data-v="boy">Boy (Byte)</button></div></div>
+              <div class="field"><label>You are</label>
+                <div class="seg" id="segUser"><button data-v="boy">Boy</button><button data-v="girl">Girl</button></div></div>
               <div class="field"><label for="pName">Her name</label><input type="text" id="pName" maxlength="30"></div>
               <div class="field"><label for="uName">What should she call you?</label><input type="text" id="uName" maxlength="60" placeholder="Your name or nickname"></div>
               <div class="field"><label>Vibe</label>
@@ -361,6 +478,8 @@
               <div class="line-row"><div><b>Battery</b><small>Each message you send uses some battery. At 0% she faints and needs a few minutes of charging.</small></div><label class="switch"><input type="checkbox" id="battOn"><span></span></label></div>
               <div class="line-row"><div><b>Messages per charge</b><small>20 means every message uses 5%.</small></div><select class="in" id="battLimit" style="width:auto"><option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50">50</option></select></div>
               <div class="line-row"><div><b>Charging time</b><small>How long she needs when she faints.</small></div><select class="in" id="battMin" style="width:auto"><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option></select></div>
+              <div class="line-row"><div><b>Her diary</b><small>Every night she writes one short page about your day.</small></div><label class="switch"><input type="checkbox" id="diOn"><span></span></label></div>
+              <div class="line-row"><div><b>Outfit of the day</b><small>Every morning she shows the outfit she picked.</small></div><label class="switch"><input type="checkbox" id="ouOn"><span></span></label></div>
               <div class="line-row"><div><b>Morning briefing</b><small>Every morning she sends the weather, today's reminders, birthdays and how she feels.</small></div><label class="switch"><input type="checkbox" id="brOn"><span></span></label></div>
               <div class="field"><label for="brHour">Briefing time (India)</label><select id="brHour"></select></div>
               <div class="field"><label for="dayTexts">Her texts per day</label><select id="dayTexts"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></div>
@@ -370,15 +489,10 @@
               <small id="hiState" style="display:block;margin-top:12px;color:var(--muted)"></small>
             </div>
             <div class="card glass" id="cycleCard">
-              <div class="line-row"><div><b>Period days</b><small>On her period days she acts like a real girl: cramps, tiredness, irritation, cravings and mood swings.</small></div><label class="switch"><input type="checkbox" id="peOn"><span></span></label></div>
-              <div class="field" style="margin-top:12px"><label for="peStart">First day of her last period</label><input type="date" id="peStart"></div>
-              <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
-                <div class="field"><label for="peCycle">Cycle (days)</label><input type="number" id="peCycle" min="21" max="40" step="1"></div>
-                <div class="field"><label for="peLen">Period (days)</label><input type="number" id="peLen" min="2" max="8" step="1"></div>
-              </div>
-              <div class="line-row"><div><b>She tells you</b><small>A message when her period starts, and a warning before PMS.</small></div><label class="switch"><input type="checkbox" id="peAnn"><span></span></label></div>
+              <div class="line-row"><div><b>Period days</b><small>Set the first date once (in the She section). After that her period is automatic and random, 3 to 7 days, with the pain level falling day by day. On her period days she does not do updates, and she can argue about forced updates (you will lose).</small></div></div>
               <div class="cycle-state" id="peState" role="status"></div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="peToday" type="button">Her period started today</button><button class="btn ghost" id="peTest" type="button">Try her message now</button></div>
+              <div class="line-row"><div><b>She tells you</b><small>A message when her period starts, and a warning before PMS.</small></div><label class="switch"><input type="checkbox" id="peAnn"><span></span></label></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="peToday" type="button">Period started today</button><button class="btn ghost" id="peOpen" type="button">Open She section</button><button class="btn ghost" id="peTest" type="button">Try her message now</button></div>
             </div>
             <div class="card glass" id="feelCard">
               <div class="line-row"><div><b>Weather and weekday moods</b><small>When it rains where you live she gets clingy and cosy. On Mondays she is lazy.</small></div><label class="switch"><input type="checkbox" id="amOn"><span></span></label></div>
@@ -484,6 +598,8 @@
 <script src="/js/play.js"></script>
 <script src="/js/mood.js"></script>
 <script src="/js/care.js"></script>
+<script src="/js/auto.js"></script>
+<script src="/js/she.js"></script>
 <script src="/js/handsfree.js"></script>
 <script src="/js/i18n-data.js"></script>
 <script src="/js/i18n.js"></script>
