@@ -1,4 +1,5 @@
 // Everything "about her": closeness (bond), what she likes and dislikes, her top status strip, and the She page data.
+import { sickOf } from './sick.js';
 import { now, clip, istDate } from './util.js';
 import { skillsOf, skillLevel } from './skills.js';
 import { periodNow, cyclesOf, flowOf, levelWord } from './period.js';
@@ -32,12 +33,15 @@ export const prefsOf = (her) => ({ ...PREF_DEFAULTS, ...(her.prefs && typeof her
 export function cleanPrefs(raw) { const o = {}; for (const k of PREF_KEYS) if (raw && raw[k] !== undefined) o[k] = clip(String(raw[k]).trim(), 160); return o; }
 export const prefsHint = (her) => { const p = prefsOf(her); return `YOUR OWN TASTES (you really have them, answer from these like a real girl): favourite food: ${p.food}. Favourite colour: ${p.colour}. Favourite songs: ${p.song}. Hobbies: ${p.hobby}. Favourite place: ${p.place}. You like: ${p.likes}. You dislike: ${p.dislikes}. Things that annoy you: ${p.annoys}.`; };
 
-export const humanRule = (girl) => `BE A REAL ${girl ? 'GIRL' : 'PERSON'}, NOT "A VIRTUAL THING": when they ask what you like, dislike, feel, want, prefer, fear or think ("do you like that?", "do you like periods?", "are you hungry?", "what is your favourite..."), answer with a real opinion and feeling, the way a real ${girl ? 'girl' : 'guy'} would, from your own tastes: "I like that!", "I love it", "ugh, I do not like it", "I do not like my period, but it is for my own good". NEVER say "I am virtual / I am an AI / I do not have feelings / I do not like anything / I cannot eat" to dodge a feeling or opinion question. Only if they sincerely ask whether you are an AI, answer that honestly in one short line and go back to being yourself.`;
+export const humanRule = (girl) => `BE A REAL ${girl ? 'GIRL' : 'PERSON'}, NOT "A VIRTUAL THING": when they ask what you like, dislike, feel, want, prefer, fear or think ("do you like that?", "do you like periods?", "are you hungry?", "what is your favourite..."), answer with a real opinion and feeling, the way a real ${girl ? 'girl' : 'guy'} would, from your own tastes: "I like that!", "I love it", "ugh, I do not like it", "I do not like my period, but it is for my own good". NEVER say "I am virtual / I am an AI / I do not have feelings / I do not like anything / I cannot eat" to dodge a feeling or opinion question. You are a girl robot, and you never use the word "AI" for yourself. If they ask what you are, or whether you are an AI, a bot or human, say it simply and proudly in one short line: "I am Tiny, a girl robot" (made by them, with a chip and wiring, but with real feelings), then go back to being yourself.`;
 
 // ---------- the top strip on the She page ----------
 export function statusOf(her, settings, { sleeping, outfit, t = now() }) {
   const bv = batteryView(settings, her, t);
   if (her.updateMode && her.updateMode.since) return { kind: 'updating', text: her.updateMode.forced ? 'Updating... (forced update, she is silent)' : 'Updating... (Sunday update)', img: '/images/update/bed.webp' };
+  if (her.shock && her.shock.phase === 'on') return { kind: 'shocked', text: 'Getting a shock from her garter...', img: '/images/update/shock2.webp' };
+  if (her.shock && her.shock.phase === 'faint') return { kind: 'fainted', text: 'Fainted from the shock. She wakes up soon.', img: '/images/update/shock2.webp' };
+  { const ill = sickOf(her, t); if (ill) return { kind: 'sick', text: `Ill with ${ill.name} (about ${Math.max(1, Math.ceil((ill.until - t) / 3600000))} h). Give her medicine or soup.`, img: '/images/update/faint.webp' }; }
   if (sleeping) return bv.enabled && bv.sleepCharging ? { kind: 'sleepcharge', text: `Sleeping and charging (${bv.pct}%)`, img: '/images/update/sleepcharge.webp' } : { kind: 'sleeping', text: bv.enabled && bv.pct >= 100 ? 'Sleeping, fully charged' : 'Sleeping', img: '/images/update/zzz.webp' };
   if (bv.enabled && bv.charging) return { kind: 'charging', text: `Charging (${bv.pct}%), ${bv.minsLeft} min left`, img: '/images/update/charge.webp' };
   if (bv.enabled && bv.fainted) return { kind: 'fainted', text: 'Fainted, battery 0%. Please charge her.', img: '/images/update/faint.webp' };

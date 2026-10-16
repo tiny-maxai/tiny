@@ -116,7 +116,7 @@ export async function textToSpeech(env, text, opts = {}) {
     try {
       const pool = girl ? GIRL_VOICES : BOY_VOICES;
       const voice = pool.includes(opts.voice) ? opts.voice : pool[0];
-      const style = girl && (!opts.mood || CHEERFUL.has(opts.mood)) ? '[cheerful] ' : '';       // no cheerful voice when she is sad, angry or sleepy
+      const style = opts.style ? `[${opts.style}] ` : girl && (!opts.mood || CHEERFUL.has(opts.mood)) ? '[cheerful] ' : '';       // no cheerful voice when she is sad, angry or sleepy
       const r = await groqFetch(env, 'tts', (key) => fetch((env.GROQ_TTS_URL || 'https://api.groq.com/openai/v1/audio/speech'), {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({ model: env.TTS_GROQ_MODEL || 'canopylabs/orpheus-v1-english', input: style + text, voice, response_format: 'wav' }),

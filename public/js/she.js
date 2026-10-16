@@ -55,7 +55,7 @@
     now.innerHTML = '<b>Right now: ' + esc(g.name) + '</b> (' + esc(g.days) + '). Be kind in the way she needs: ' + esc(g.needs.join(', ').toLowerCase()) + '.';
   }
   function paintOcc(d) {
-    const o = d.occasion; $('#bdDate').value = '2000-' + o.birthday;
+    const o = d.occasion;
     const box = $('#occList'); box.textContent = '';
     o.upcoming.forEach((u) => {
       const e = document.createElement('div'); e.className = 'mt-item';
@@ -82,7 +82,7 @@
     if (!list.length) { box.innerHTML = '<div class="empty" style="padding:10px">No skills yet. When you finish her Sunday wish "learn to cook" she gets it too.</div>'; return; }
     list.forEach((s) => {
       const d = document.createElement('div'); d.className = 'mt-item';
-      d.innerHTML = '<div><b>' + esc(s.name) + '</b><small>Level ' + s.level + ' of 5 · used ' + (s.uses || 0) + ' times · say "use ' + esc(s.name.toLowerCase()) + ' skill"</small></div>';
+      d.innerHTML = '<div><b>' + esc(s.name) + '</b><small>' + (s.waiting ? 'Waiting for her next update to be installed' : 'Level ' + s.level + ' of 5 · used ' + (s.uses || 0) + ' times · say "use ' + esc(s.name.toLowerCase()) + ' skill"') + '</small></div>';
       const b = document.createElement('button'); b.type = 'button'; b.className = 'mini-btn'; b.textContent = 'Remove'; b.addEventListener('click', () => act({ action: 'skillDel', id: s.id })); d.appendChild(b); box.appendChild(d);
     });
   }
@@ -92,7 +92,14 @@
     const box = $('#diaryList'); box.textContent = ''; $('#diaryEmpty').hidden = list.length > 0;
     list.forEach((e) => { const c = document.createElement('div'); c.className = 'diary-page'; c.innerHTML = '<h4 class="mt-h">' + esc(nice(e.date)) + '</h4><p style="white-space:pre-line;margin:0">' + esc(e.text) + '</p>'; box.appendChild(c); });
   }
-  function paint(d) { data = d; ym = d.month.ym; paintStrip(d); paintPeriod(d); paintPhases(d); paintOcc(d); paintBond(d.bond); paintSkills(d.skills); paintPrefs(d.prefs); paintDiary(d.diary); if (App.refreshHer) App.refreshHer(); }
+  function paintSick(d) {
+    const s = d.sick, kinds = d.sickKinds || [];
+    $('#sickTxt').textContent = s ? 'She has ' + s.name + '. About ' + s.left + ' h left. No update until she is better.' : 'She is well.';
+    $('#sickBtns').hidden = !s;
+    if (s) [...$('#sickBtns').children].forEach((b) => { b.disabled = !!s.care[b.dataset.w]; });
+    const pick = $('#sickPick'); if (!pick.options.length) kinds.forEach((k) => { const o = document.createElement('option'); o.value = k.k; o.textContent = k.name; pick.appendChild(o); });
+  }
+  function paint(d) { data = d; paintSick(d); ym = d.month.ym; paintStrip(d); paintPeriod(d); paintPhases(d); paintOcc(d); paintBond(d.bond); paintSkills(d.skills); paintPrefs(d.prefs); paintDiary(d.diary); if (App.refreshHer) App.refreshHer(); }
   async function load(body, month) { try { paint(await App.api('/api/she' + (month ? '?ym=' + month : ''), body ? { body } : undefined)); return true; } catch (e) { App.toast(e.message); return false; } }
   const act = (body) => load(body, ym);
   App.openShe = () => App.showView('she');
@@ -101,8 +108,9 @@
   $('#sheStart').addEventListener('click', async () => { if (await act({ action: 'periodStart' })) { App.toast('Okay... her period started today. Be nice to her!'); App.flashPose && App.flashPose('cry', 4000); } });
   $('#sheLevel').addEventListener('input', (e) => { $('#sheLevelVal').textContent = e.target.value + '%'; });
   $('#sheLevelSave').addEventListener('click', async () => { if (await act({ action: 'periodLevel', level: +$('#sheLevel').value })) App.toast('Saved. Her next period starts at ' + $('#sheLevel').value + '%.'); });
-  $('#bdSave').addEventListener('click', async () => { if (await act({ action: 'birthday', date: $('#bdDate').value })) App.toast('Saved her birthday.'); });
   $('#feAdd').addEventListener('click', async () => { if (await act({ action: 'festAdd', name: $('#feName').value, date: $('#feDate').value, yearly: true })) { $('#feName').value = ''; App.toast('Saved. On that day she will ask what to wear.'); } });
+  $('#sickBtns').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) act({ action: 'sickCare', what: b.dataset.w }); });
+  $('#sickMake').addEventListener('click', () => act({ action: 'makeSick', k: $('#sickPick').value }));
   $('#skAdd').addEventListener('click', async () => { const v = $('#skName').value.trim(); if (!v) return; if (await act({ action: 'skillAdd', name: v })) $('#skName').value = ''; });
   $('#skName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#skAdd').click(); });
   $('#pfSave').addEventListener('click', async () => { const prefs = {}; Object.keys(PF).forEach((k) => { prefs[k] = $(PF[k]).value; }); if (await act({ action: 'prefs', prefs })) App.toast('She will remember this.'); });

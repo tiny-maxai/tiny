@@ -6,6 +6,7 @@ import { moodKindNow } from './tinymood.js';
 import { periodNow } from './period.js';
 import { sendPhoto } from './telegram.js';
 import { getOcc, tagOf } from './occasion.js';
+import { getWeather } from './ambient.js';
 
 const h32 = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 export const outfitPath = (n) => `/images/outfits/outfit-${n}.webp`;
@@ -30,9 +31,15 @@ export async function outfitToday(env, settings, { t = now(), force = false } = 
   const cur = await env.KV.get('outfit:today', 'json').catch(() => null);
   if (cur && cur.date === today && !force && cur.n <= count) return cur;
   const occ = await getOcc(env), pr0 = periodNow(settings);
-  let pool = Array.from({ length: count }, (_, i) => i + 1).filter((i) => !['garba', 'saree', 'party'].includes(tagOf(occ, i)));   // festive outfits only for festivals
+  let pool = Array.from({ length: count }, (_, i) => i + 1).filter((i) => !['garba', 'lehenga', 'saree', 'party', 'night'].includes(tagOf(occ, i)));   // festive outfits only for festivals
   if (pr0 && pr0.phase === 'period') { const cozy = pool.filter((i) => tagOf(occ, i) === 'comfy'); if (cozy.length) pool = cozy; }
   if (!pool.length) pool = Array.from({ length: count }, (_, i) => i + 1);
+  if (!(pr0 && pr0.phase === 'period')) {            // the morning outfit follows the weather: rain, cold, heat, otherwise coffee time
+    const wx = await getWeather(env, settings).catch(() => null);
+    const want = wx && wx.rain ? 'rainy' : wx && wx.temp <= 14 ? 'winter' : wx && wx.temp >= 35 ? 'summer' : h32(today + ':c') % 3 !== 0 ? 'coffee' : '';
+    const w = want ? pool.filter((i) => tagOf(occ, i) === want) : [];
+    if (w.length) pool = w;
+  }
   let n = pool[h32(today + (force ? ':' + t : '')) % pool.length];
   if (cur && cur.n === n && pool.length > 1) n = pool[(pool.indexOf(n) + 1) % pool.length];                         // never the same two times in a row
   const name = (settings.persona && settings.persona.name) || 'Tiny';

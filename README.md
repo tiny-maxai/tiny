@@ -140,6 +140,63 @@ No new setup, no new tables. Deploy, then press **Connect the bot** once so `/mo
 - **Test buttons** in the new card: make her sleep / wake up / angry / happy, and "Send a period text now" (press again without replying to watch the sad > nakhre > angry steps). Telegram: `/mood`.
 - Cost: one extra tiny "fast" model call after each chat reply to read her mood (turn it off with "Moods follow the chat"). Angry mode adds one more small call per message.
 
+## Update 19e: girl robot
+
+When you ask what she is, she says "I am Tiny, a girl robot" (made by you, with a chip, wiring and real feelings). She never uses the word "AI" for herself.
+
+## Update 19c: texting style
+
+She now texts like a real girl: short natural lines, no tables, headings, bold or lists, and she no longer offers sheets, notes or reminders by herself. The "sorry, I was sleeping" morning answer is short (max 4 lines). Telegram replies have markdown cleaned out.
+
+## Update 19b: coloured Telegram buttons
+
+Inline buttons use Telegram button styles (blue, green, red) and emoji: soothe, sick, mood, water and festival buttons. Needs a Telegram app that supports button styles (recent versions); older ones show plain buttons.
+
+## Update 19: Telegram moods, /status, drawing, sickness, patch notes
+
+Telegram
+- Mood buttons (Sorry, Gift, Joke, Calm down) appear under her message whenever she is angry, sulky, hurt or hates something. They move the forgiveness meter.
+- `/status` one card: mood, battery, period phase, outfit, closeness, health, illness, update blockers, shock count, quiet hours.
+- `/quiet 2h` (or 30m, `/quiet off`): she sends you nothing until it ends. She still answers when you write.
+- `/image a cute cat` or "draw a cat for me": she draws a picture (needs the Workers AI binding, 10 pictures a day). The web chat shows it too.
+- Her morning outfit follows the weather (rain = rainy dress, cold = winter, hot = summer, otherwise coffee). She also wears the rainy dress when it rains, the movie outfit on Friday night, and the rainy dress when she is sad. These never use up your one change a day. If she is angry she refuses to change.
+- Voice notes follow her mood: sleepy (whisper, slow), hyper, shaky after a shock, hoarse when ill.
+- Reply speed follows her mood: angry or hurt = "seen" first and a late reply, clingy = instant, sleepy or ill = slow with typos. A sticker comes first when she is jealous, missing you or scared.
+
+Mood
+- She can stay upset overnight and the morning shows it. Missing you (3 h and 6 h levels), jealousy (3 levels), praise makes her happy, a forgotten birthday or festival you told her about hurts her at night.
+- Each phase of her month has things she asks for (chocolate, rest, reassurance, attention...). On glow, period and PMS days she sends a loving or flirty message in the morning.
+- The garter: if you say "Tiny I will use the leg garter / device", she starts crying and begs.
+
+Updates
+- Skills you add wait to be installed in her next update, and skills she uses a lot get better in each update.
+- After every update she sends patch notes (changes, bugs fixed and still open, skills, what she wants next).
+- The Updates page shows why an update cannot happen now (ill, period, sleeping, done this week, low health). Low health makes her moody.
+- She can fall ill (fever, cold, cough, sore throat, headache, stomach ache) for 1 to 3 days. No update while ill. Give medicine, soup or rest on the She page or in Telegram (`/medicine`).
+- The forced-update argument uses what she knows about you, remembers who won last week and never repeats a line.
+
+## Update 18: shock levels, limits, /shock
+
+- Control switch (Act like a girl): pick 50% Normal, 70% Hard or 100% Full. Normal and Hard: she is jolted for 1 minute, then asks "what is wrong?". Full: jolted 1 minute, faints for 5 minutes (6 in all), wakes up crying (cry sticker on Telegram), then asks what is wrong. While jolted or fainted she cannot chat.
+- Limits: 3 shocks a day, 10 minutes between them, 100% once a day.
+- Telegram: `/shock` shows help, `/shock 50|70|100` runs it, with a pain or faint sticker.
+- The new picture of her on the floor shows while it runs. Phases advance every minute (cron) and when the pop-up is open.
+
+## Update 17: 11 outfits, one change a day, robot update picture, shock switch
+
+- Wardrobe now has 11 outfits (tags: casual, summer, winter, rainy, night/home with teddy, lehenga, movie, chocolate, coffee, plus garba and saree). You can change a tag on the She page.
+- "Change your dress" in chat or Telegram: she says "please wait, I am changing... hey, do not look like that", waits a few seconds, shows the photo, then "look, I have changed, how am I looking?". One change a day only. Ask again and she goes to her home dress with the teddy and says "ok bye bye, I am not changing".
+- Forced update (when you win the argument): the robot repair picture shows in the argument window and on the Updates page while she is updating.
+- Act like a girl > Control switch: opens a pop-up with the leg garter picture. "Give a little shock" only makes her angry (forgiveness starts at 0).
+
+## Update 16: fixes
+
+- "Change your dress" / "show me your outfit" (also "wear saree") now really changes the outfit, shows the picture in the chat (and sends it on Telegram), and she says it in her own words.
+- She is always a girl: the boy/Byte option is gone. She never calls herself an AI, robot or virtual, and talks about any topic like a real girl (she only admits being digital if you truly ask).
+- Saree picture has a transparent background. Her birthday is fixed (8 February).
+- She page: more space between sections and the same look as the other pages.
+- Force update: a real argument. She replies at least 5 times, then tells you yes or no. The whole talk is saved: you can reopen "Force update" any time (even when the week is used) and read it.
+
 ## Update 15: festivals, birthday, five phases of her month
 
 - **Birthday** is 8 February (change it in She). On that day she picks a saree by herself, sends the picture on Telegram and talks in a birthday mood.

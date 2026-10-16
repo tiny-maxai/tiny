@@ -8,7 +8,9 @@ export async function asleepNow(env) {
   try {
     const { getSettings } = await import('./settings.js'), { getHer, isSleeping } = await import('./her.js');
     const [st, her] = await Promise.all([getSettings(env), getHer(env)]);
-    return isSleeping(st, her, now());
+    if (isSleeping(st, her, now())) return true;
+    const q = Number(await env.KV.get('quiet:until').catch(() => 0)) || 0;      // /quiet 2h in Telegram
+    return q > now();
   } catch { return false; }
 }
 

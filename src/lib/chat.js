@@ -1,6 +1,6 @@
 // The chat pipeline shared by the website and Telegram:
 // save the message, recall memories, build the prompt, (stream) the answer, save it, learn new facts.
-import { uid, now, clip } from './util.js';
+import { uid, now, clip, plainChat } from './util.js';
 import { getSettings } from './settings.js';
 import { recall, indexChat, extractAndStore } from './memory.js';
 import { buildSystem } from './persona.js';
@@ -10,12 +10,13 @@ import { moodContext } from './moods.js';
 import { periodNow } from './period.js';
 import { assist } from './assist.js';
 import { tinyMoodNow } from './tinymood.js';
-import { beforeReply, afterReply, getHer, putHer, queueMessage } from './her.js';
+import { beforeReply, afterReply, getHer, putHer, queueMessage, moodNow, SOOTHABLE } from './her.js';
 import { getLife, lifeLines } from './life.js';
 import { getAmbient, ambientLines } from './ambient.js';
 import { bondOf, prefsHint, humanRule } from './she.js';
 import { matchSkill, skillHint, skillLevel } from './skills.js';
-import { occasionTurn } from './occasion.js';
+import { imageTurn, GARTER_LINE } from './extras.js';
+import { occasionTurn, stripImg } from './occasion.js';
 import { outfitCount } from './outfit.js';
 
 export async function ensureConversation(env, convId, source, firstText) {
@@ -30,6 +31,7 @@ export async function ensureConversation(env, convId, source, firstText) {
   return id;
 }
 
+const TEXT_STYLE = 'TEXTING STYLE: you are texting like a real girl. Normal replies are short and natural (1 to 4 lines), no tables, no headings, no bold, no bullet lists, and you do not offer to make sheets, notes or reminders on your own. Only use a list, steps or a table when they clearly ask for one, ask a study question that needs steps, or ask for a file.';
 export async function prepareChat(env, { convId, text, source = 'web', via = 'text', spoken = false, noteId = null, task = false, gate = null, noInsert = false }) {
   // Everything that does not depend on the new message loads at the same time, so the first word comes sooner.
   const settings = await getSettings(env);
@@ -50,12 +52,17 @@ export async function prepareChat(env, { convId, text, source = 'web', via = 'te
   let userMsgId = null;
   if (!noInsert) { const ins = await env.DB.prepare('INSERT INTO messages (conv_id,role,content,via,created_at) VALUES (?,?,?,?,?)').bind(id, 'user', text, via, now()).run(); userMsgId = ins.meta && ins.meta.last_row_id; }
   const hist = await env.DB.prepare('SELECT role,content FROM messages WHERE conv_id=? ORDER BY id DESC LIMIT 20').bind(id).all();
-  const history = (hist.results || []).reverse().map((m) => ({ role: m.role, content: clip(m.content, m.role === 'user' && m.content.startsWith('[File: ') ? 17000 : 3000) }));
+  const history = (hist.results || []).reverse().map((m) => ({ role: m.role, content: clip(stripImg(m.content), m.role === 'user' && m.content.startsWith('[File: ') ? 17000 : 3000) }));
   const period = periodNow(settings);
   const bond = task ? null : await bondOf(env).catch(() => null), sk = task ? null : matchSkill(herNow, text);
-  const extra = [humanRule(settings.persona.gender === 'girl'), prefsHint(herNow), bond ? `YOUR CLOSENESS WITH THEM: level ${bond.level} of ${bond.of} (${bond.name}). ${bond.talk} Never mention the level or its name.` : '', skillHint(sk), task ? '' : await occasionTurn(env, text, { source, count: await outfitCount(env).catch(() => 0) }).catch(() => '')].filter(Boolean).join('\n');
+  const cm = moodNow(herNow, settings, now());
+  const occ = task ? { hint: '', image: '', pre: '' } : await occasionTurn(env, text, { source, count: await outfitCount(env).catch(() => 0), mood: cm && cm.k }).catch(() => ({ hint: '', image: '', pre: '' }));
+  const im = task ? null : await imageTurn(env, text).catch(() => null);                      // "draw me a cat": she makes a picture
+  if (im) { occ.image = im.image; occ.pre = im.pre; occ.hint = [occ.hint, im.hint].filter(Boolean).join(' '); }
+  const carry = cm && SOOTHABLE.has(cm.k) && now() - (cm.born || cm.since || now()) > 5 * 3600000 ? `You are STILL ${cm.k}${cm.reason ? ' because ' + cm.reason : ''}, it carried over from before. If this is the first message of a new day, let it show (cold or hurt, not over it yet).` : '';
+  const extra = [humanRule(settings.persona.gender === 'girl'), prefsHint(herNow), bond ? `YOUR CLOSENESS WITH THEM: level ${bond.level} of ${bond.of} (${bond.name}). ${bond.talk} Never mention the level or its name.` : '', skillHint(sk), settings.persona.gender === 'girl' ? GARTER_LINE : '', settings.persona.gender === 'girl' ? TEXT_STYLE : '', carry, occ.hint].filter(Boolean).join('\n');
   const system = buildSystem({ settings, mem, spoken, source, note, task, moods, period, done: helped.done, web: helped.web, notes: helped.notes, moodKind: tinyMoodNow(settings, { lastActive: last, her: g.her || herNow, period, ambient: amb }), hint: g.hint || '', life: lifeLines(lifeNow), ambient: ambientLines(amb), extra });
-  return { convId: id, userMsgId, settings, messages: [{ role: 'system', content: system }, ...history] };
+  return { convId: id, userMsgId, settings, image: occ.image, pre: occ.pre, messages: [{ role: 'system', content: system }, ...history] };
 }
 
 // Saves the reply and learns from it. Safe to run in the background.
@@ -65,7 +72,7 @@ export async function finishChat(env, { convId, userMsgId, text, reply, model, s
   await env.DB.prepare('UPDATE conversations SET updated_at=? WHERE id=?').bind(t, convId).run();
   const botId = ins.meta && ins.meta.last_row_id;
   const her = source === 'routine' ? {} : await getHer(env);
-  { const sk = source === 'routine' ? null : matchSkill(her, text); if (sk) { sk.skill.uses = (sk.skill.uses || 0) + 1; sk.skill.level = skillLevel(sk.skill); await putHer(env, her); } }
+  { const sk = source === 'routine' ? null : matchSkill(her, text); if (sk && !sk.pending) { sk.skill.uses = (sk.skill.uses || 0) + 1; sk.skill.level = skillLevel(sk.skill); await putHer(env, her); } }
   const creator = !!(her.updateUntil && her.updateUntil > t);       // they said "I am going to update you": what they say about her is stored as her memory
   await Promise.allSettled([
     userMsgId ? indexChat(env, userMsgId, 'user', text, convId) : null,
@@ -89,10 +96,11 @@ export async function sleepTurn(env, { convId, text, source = 'web', via = 'text
 export async function answerQueued(env, items) {
   const first = items[0];
   const her = await getHer(env);
-  const gate = { her, hint: 'You were asleep when they wrote the latest message(s) in this chat. Start with a cute "sorry, I was sleeping 😴" in your own words (once), then answer what they wrote, naturally. Do not act as if you read them in real time.', creatorUpdate: false };
+  const gate = { her, hint: 'You were asleep when they wrote the latest message(s) in this chat. Start with a cute "sorry, I was sleeping 😴" in your own words (once), then answer what they wrote, naturally. Do not act as if you read them in real time. Answer in 1 to 4 short text-message lines like a girl who just woke up: no tables, no lists, no bold, no headings, and do not offer sheets, notes or reminders unless they asked for one. Reply ONLY to what they actually wrote: do not start a new topic, do not bring up recipes, plans or things from memory that they did not mention in those messages.', creatorUpdate: false };
   const text = items.map((i) => i.text).join('\n');
   const p = await prepareChat(env, { convId: first.convId, text, source: first.source || 'web', via: 'text', gate, noInsert: true });
-  const r = await complete(env, { brain: p.settings.brain, messages: p.messages, temperature: 0.8, maxTokens: 900 });
+  const r = await complete(env, { brain: p.settings.brain, messages: p.messages, temperature: 0.8, maxTokens: 320 });
+  r.text = plainChat(r.text);
   await finishChat(env, { convId: p.convId, userMsgId: null, text, reply: r.text, model: r.model, source: first.source || 'web', settings: p.settings });
   return { text: r.text, name: p.settings.persona.name, convId: p.convId, source: first.source || 'web' };
 }

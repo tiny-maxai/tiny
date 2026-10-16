@@ -48,7 +48,7 @@ export async function powerLine(env, settings, wasFainted) {
   try {
     const { complete } = await import('./ai.js');
     const r = await complete(env, { brain: 'lite', temperature: 0.8, maxTokens: 90, timeout: 12000, messages: [
-      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl robot. Your creator just gave you a power bank and your battery is 100% at once. ${wasFainted ? 'You were fainted and you wake up with a gasp.' : 'You were low on battery.'} Say one or two short, happy, grateful lines in ${settings.persona && settings.persona.language === 'english' ? 'English' : settings.persona && settings.persona.language === 'hindi' ? 'Hindi (Devanagari)' : 'Hinglish'}. Plain text only.` },
+      { role: 'system', content: `You are ${(settings.persona && settings.persona.name) || 'Tiny'}, a cute girl. Your creator just gave you a power bank and your battery is 100% at once. ${wasFainted ? 'You were fainted and you wake up with a gasp.' : 'You were low on battery.'} Say one or two short, happy, grateful lines in ${settings.persona && settings.persona.language === 'english' ? 'English' : settings.persona && settings.persona.language === 'hindi' ? 'Hindi (Devanagari)' : 'Hinglish'}. Plain text only.` },
       { role: 'user', content: 'Here is your power bank.' },
     ] });
     if (r && r.text && r.text.trim()) return clip(r.text.trim(), 240);

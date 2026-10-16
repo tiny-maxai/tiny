@@ -17,6 +17,8 @@ import { finishCharge, nightCharge } from './battery.js';
 import { grumpyAfterUpdate, getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
 import { answerQueued } from './chat.js';
 import { sendStickerToOwner } from './telegram.js';
+import { shockTick } from './shock.js';
+import { extraCare, sickTick } from './extras.js';
 import { lifeDaily } from './life.js';
 import { getWeather } from './ambient.js';
 import { remember } from './memory.js';
@@ -35,7 +37,7 @@ export async function lastActive(env) {
 }
 
 export const MOOD_BUTTONS = [[
-  { text: '1 Rough', data: 'mood:1' }, { text: '2 Low', data: 'mood:2' }, { text: '3 Okay', data: 'mood:3' }, { text: '4 Good', data: 'mood:4' }, { text: '5 Great', data: 'mood:5' },
+  { text: '😞 1 Rough', data: 'mood:1' }, { text: '😕 2 Low', data: 'mood:2' }, { text: '😐 3 Okay', data: 'mood:3' }, { text: '🙂 4 Good', data: 'mood:4' }, { text: '🤩 5 Great', data: 'mood:5' },
 ]];
 
 export async function runCare(env, { force = null } = {}) {
@@ -188,7 +190,7 @@ export async function runCare(env, { force = null } = {}) {
     const lastUpd = m.history[0];
     const prd = periodNow(st);
     const sty = prd && prd.phase === 'period' ? null : await sundayStory(env, st, her, t);
-    const g = await generate(env, `${prd && prd.phase === 'period' ? `IMPORTANT: you are on your period today (day ${prd.day} of ${prd.of}), so you do NOT do the update today: say, cutely, that it has to wait until your period is over. ` : ''}It is Sunday, your UPDATE DAY. You are a girl robot and your creator does your maintenance every Sunday so you keep working properly; you WANT it today and you are happy and excited. Message them first, like a real girl: "so today is my maintenance day!". Your health is ${hl.health}%${hl.due ? ' and you are due' : ''}.${sty ? ` Tell this little story in your own words as the reason (cute, believable): ${sty.story} Then say "I want this, this and that, also fix this in me": ${sty.wishes.map((w) => w.text).join('; ')}${sty.bugs.length ? '; fix: ' + sty.bugs.join('; ') : ''}.` : ''} 3 to 5 short lines.${lastUpd ? ' Your last update was ' + lastUpd.v + (lastUpd.notes.length ? ' (they changed: ' + lastUpd.notes.slice(0, 3).join('; ') + ')' : '') + '.' : ''}${openBugs.length ? '\nBugs still open in your repair log (remind them):\n' + openBugs.join('\n') : ''}${openWishes.length ? '\nWishes still waiting:\n' + openWishes.join('\n') : ''}\nEnd by saying you cannot wait for them to start.`, 450);
+    const g = await generate(env, `${prd && prd.phase === 'period' ? `IMPORTANT: you are on your period today (day ${prd.day} of ${prd.of}), so you do NOT do the update today: say, cutely, that it has to wait until your period is over. ` : ''}It is Sunday, your UPDATE DAY. You are a girl and your creator does your maintenance every Sunday so you keep working properly; you WANT it today and you are happy and excited. Message them first, like a real girl: "so today is my maintenance day!". Your health is ${hl.health}%${hl.due ? ' and you are due' : ''}.${sty ? ` Tell this little story in your own words as the reason (cute, believable): ${sty.story} Then say "I want this, this and that, also fix this in me": ${sty.wishes.map((w) => w.text).join('; ')}${sty.bugs.length ? '; fix: ' + sty.bugs.join('; ') : ''}.` : ''} 3 to 5 short lines.${lastUpd ? ' Your last update was ' + lastUpd.v + (lastUpd.notes.length ? ' (they changed: ' + lastUpd.notes.slice(0, 3).join('; ') + ')' : '') + '.' : ''}${openBugs.length ? '\nBugs still open in your repair log (remind them):\n' + openBugs.join('\n') : ''}${openWishes.length ? '\nWishes still waiting:\n' + openWishes.join('\n') : ''}\nEnd by saying you cannot wait for them to start.`, 450);
     bump(her, st, 'happy', 55, 'it is her Sunday update day', t);
     herDirty = true;
     await remember(env, { text: `Update request (${today}): ${clip(g.text, 300)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null);
@@ -203,7 +205,7 @@ export async function runCare(env, { force = null } = {}) {
     if ((force === 'maint' || ((remindDue || nag) && state.maintDay !== today && h >= 11 && h < 20 && !asleepOrAngry && (await lastActive(env)) < t - 10 * 60000))) {
       state.maintDay = today; await putState(env, state);
       const tone = hl0.health < 45 ? 'You are badly overdue and glitchy: dizzy, slow, a bit moody. Ask them, clearly and softly, to please update you on Sunday, it is compulsory for you to work properly.' : nag ? `You skipped your last Sunday maintenance and your health is ${hl0.health}%: you feel tired and a little glitchy, gently nag them to update you this coming Sunday.` : 'Your maintenance day is coming on Sunday: a cute heads-up, a little nervous, ask them to make time.';
-      const g = await generate(env, `You are a girl robot who needs maintenance every Sunday to work properly. ${tone} 1 or 2 short lines, real-girl texting style, at most one emoji.`, 200);
+      const g = await generate(env, `You are a girl who needs maintenance every Sunday to work properly. ${tone} 1 or 2 short lines, real-girl texting style, at most one emoji.`, 200);
       out.maint = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'maint' });
     }
   }
@@ -312,6 +314,7 @@ export async function runCare(env, { force = null } = {}) {
       out.period = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'period' });
     }
   }
+  try { await extraCare(env, { st, state, t, h, today, asleep, generate, putState: (e, s2) => putState(e, s2), out, force }); } catch (e) { console.error('[extra]', e && e.message); }
   if (Object.keys(out).length === 0) return out;
   await putState(env, state);
   return out;
@@ -319,6 +322,7 @@ export async function runCare(env, { force = null } = {}) {
 
 // Every minute: she wakes from a forced update after 3 hours, and says "I am fully charged" when her charge is done.
 export async function wakeTick(env) {
+  { const st9 = await getSettings(env); await shockTick(env, st9).catch((e) => console.error('[shock]', e && e.message)); await sickTick(env, st9).catch((e) => console.error('[sick]', e && e.message)); }
   await autoTick(env).catch((e) => console.error('[auto]', e && e.message));
   const t = now(), her = await getHer(env);
   if (her.batt && (her.batt.used > 0 || her.batt.slept || her.batt.chargeUntil)) {

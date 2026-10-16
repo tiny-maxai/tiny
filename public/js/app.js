@@ -107,6 +107,7 @@
       let m;
       if ((m = line.match(/^\u0001(\d+)\u0001$/))) { flushP(); flushL(); out.push(fences[+m[1]]); continue; }
       if (!line.trim()) { flushP(); flushL(); continue; }
+      if ((m = line.match(/^\[\[img:(\/(?:images|img)\/[\w\/.-]+)\]\]$/))) { flushP(); flushL(); out.push('<img class="chat-img" src="' + m[1] + '" alt="Her outfit" loading="lazy">'); continue; }
       if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flushP(); flushL(); out.push(`<h${m[1].length}>` + inline(m[2]) + `</h${m[1].length}>`); continue; }
       if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) { flushP(); if (!list || list.t !== 'ul') { flushL(); list = { t: 'ul', items: [] }; } list.items.push(m[1]); continue; }
       if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushP(); if (!list || list.t !== 'ol') { flushL(); list = { t: 'ol', items: [] }; } list.items.push(m[1]); continue; }
@@ -126,7 +127,7 @@
   // battery and update states beat every mood: fainted, charging, or asleep in an update
   const lockPose = () => { const h = App.herState; if (!h) return null; const b = h.battery; if (h.sleeping && b && b.enabled && b.sleepCharging) return 'zzz'; if (b && b.enabled && b.charging) return 'charge'; if (b && b.enabled && b.fainted) return 'faint'; return h.updating ? 'zzz' : null; };
   const moodPose = () => (App.herKind && App.herKind !== 'normal' ? MOOD_POSE[App.herKind] || null : null);
-  const isBoy = () => App.settings && App.settings.persona.gender === 'boy';
+  const isBoy = () => false;
   const stk = (n) => '/images/stickers/' + (isBoy() ? 'byte-' + (BYTE_ALIAS[n] || n) : 'tiny-' + n) + '.webp';
   App.stk = stk;
   const stickerBtn = $('#sticker'), stickerImg = $('#stickerImg'), stkBob = $('#stkBob'), stkMotion = $('#stkMotion'), stickerWrap = $('#stickerWrap');
@@ -231,6 +232,7 @@
   const rmTyping = () => { const r = $('#typingRow'); if (r) r.remove(); };
 
   function addActions(bubble, text) {
+    text = String(text).replace(/\[\[img:[^\]]*\]\]\s*/g, '');
     const a = document.createElement('div'); a.className = 'acts';
     const mk = (ic, label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'act'; b.innerHTML = icon(ic) + '<span>' + label + '</span>'; b.addEventListener('click', () => fn(b)); a.appendChild(b); };
     mk('i-speaker', 'Listen', (b) => { if (b.classList.contains('on')) { App.stopSpeak(); b.classList.remove('on'); return; } b.classList.add('on'); App.speak(text).finally(() => b.classList.remove('on')); });

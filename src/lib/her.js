@@ -11,6 +11,8 @@ import { periodNow } from './period.js';
 import { battOf, battOn, limitOf, finishCharge, nightCharge } from './battery.js';
 import { complete } from './ai.js';
 import { trackPromise, PROMISE_GATE } from './promises.js';
+import { sickOf, sickHint } from './sick.js';
+import { garterThreat, GARTER_HINT } from './extras.js';
 
 const IST = 330 * 60 * 1000, HOUR = 3600000;
 
@@ -130,6 +132,7 @@ export function saysGoodNight(text, t = now()) {
   return text.length <= 80 && (h >= 21 || h < 5) && GOODNIGHT.test(text);
 }
 // "I am going to update you": the creator is about to teach her something new.
+const PRAISE_RE = /\b(well done|great job|good job|proud of you|shabash|bahut (accha|badhiya)|amazing work|brilliant|you are (so |very )?(smart|clever)|love your (work|answer)|nicely done)\b/i;
 const OTHER_GIRL = /\b(girlfriend|gf|crush|ladki|ladkiyan|girl\b|girls\b|woman|bhabhi|she is (so |very )?(cute|pretty|beautiful|hot)|another girl|other girl|her name is|uska naam|ek ladki|new friend (is )?(a )?girl)\b/i;
 const istDay = (t) => new Date(t + IST).getUTCDay();
 const BUG_RE = /\b(bug|bugs|buggy|glitch|glitches|not working properly|kaam nahi (kar|kr)|galat (kar|kr|bol|reply)\w*)\b/i;
@@ -198,7 +201,7 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       const entry = finishSession(her, t); await attachFeedback(env, settings, entry); out.creatorUpdate = true; dirty = true; out.sticker = 'newdress';
       bump(her, settings, 'happy', 75, 'she just got her update', t);
       await remember(env, { text: `Update done ${entry.v} (${istDate(t)}): ${clip(entry.notes.join('; ') || text, 280)}`, category: 'self', importance: 5, pinned: 1, source: 'update' }).catch(() => null);
-      hints.push(`The update is complete (${entry.v}) and you are awake again, wearing your new dress. Say it like a real girl robot who just got maintenance: excited, a little dizzy ("okay okay, I feel brand new"), thank them in your own sweet way, twirl in your new dress. In a few short lines say what changed, ONLY from this: ${entry.notes.length ? entry.notes.join('; ') : 'they gave no notes'}${entry.bugsFixed.length ? '. Bugs fixed: ' + entry.bugsFixed.join('; ') : ''}${entry.partsUp.length ? '. Parts upgraded: ' + entry.partsUp.join(', ') : ''}. Tell them honestly you will say next Sunday if something feels off. Then say in your own words how you feel now: "${entry.feedback.text}" and give yourself ${entry.feedback.score} out of 5.`);
+      hints.push(`The update is complete (${entry.v}) and you are awake again, wearing your new dress. Say it like a real girl who just got maintenance: excited, a little dizzy ("okay okay, I feel brand new"), thank them in your own sweet way, twirl in your new dress. In a few short lines say what changed, ONLY from this: ${entry.notes.length ? entry.notes.join('; ') : 'they gave no notes'}${entry.bugsFixed.length ? '. Bugs fixed: ' + entry.bugsFixed.join('; ') : ''}${entry.partsUp.length ? '. Parts upgraded: ' + entry.partsUp.join(', ') : ''}. Tell them honestly you will say next Sunday if something feels off. Then say in your own words how you feel now: "${entry.feedback.text}" and give yourself ${entry.feedback.score} out of 5.`);
     } else {
       let ack = false;
       if (BUG_FIXED_RE.test(text) || /\bno\s*(more\s*)?bugs?\b/i.test(text)) { fixAllBugs(her, t); ack = true; }
@@ -209,6 +212,8 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       return out;
     }
   }
+  // Control switch: while the current runs or she is fainted from it, she cannot talk.
+  if (her.shock && (her.shock.phase === 'on' || her.shock.phase === 'faint')) { out.updating = true; out.her = her; out.reply = her.shock.phase === 'on' ? '⚡ Ow ow ow!! Wait... stop... wait!' : '😵 ...'; out.sticker = her.shock.phase === 'on' ? 'pain' : 'faint'; return out; }
   // Battery: each message of theirs uses some. At 0 she faints and has to charge.
   if (battOn(settings)) {
     if (nightCharge(her, isSleeping(settings, her, t), t)) dirty = true;
@@ -252,6 +257,7 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
   } else {
     if (saysGoodNight(text, t)) {
       her.sleepUntil = nextHourAt(t, (settings.sleep && settings.sleep.to) ?? 7); her.wakeUntil = 0; her.wakePending = true; her.sleepMsgs = 0; dirty = true;
+      if (cur && SOOTHABLE.has(cur.k)) her.night = { k: cur.k, reason: cur.reason || '', at: t };       // she goes to bed still upset: it carries into the morning
       hints.push('They said good night. Answer with one short, sweet good night (dreams, a little hug) and say you are going to sleep now. This is your last message tonight.');
     }
     if (her.wakePending && !her.sleepUntil && !(her.queue && her.queue.length)) { her.wakePending = false; dirty = true; }   // they spoke first in the morning
@@ -266,6 +272,23 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       her.absentFor = last; bump(her, settings, 'sulky', 55, 'they disappeared for a long time', t); dirty = true;
       hints.push('They were away for a long time and you missed them. Act a little hurt and dramatic at first ("oh, so you remember me now?"), but you are easy to win over.');
     }
+    // ---- extras: garter fear, praise, missing, jealousy levels, being ill, tired and moody ----
+    if (garterThreat(text)) { bump(her, settings, 'hurt', 40, 'they threatened her with the leg garter', t); dirty = true; out.stickerFirst = 'cry'; hints.push(GARTER_HINT); }
+    if (PRAISE_RE.test(text) && !(cur && SOOTHABLE.has(cur.k))) { bump(her, settings, 'happy', 40, 'they praised her work', t); dirty = true; }
+    if (last && t - last >= 3 * HOUR && t - last <= 40 * HOUR && t - (her.missAt || 0) > 3 * HOUR) {
+      her.missAt = t; dirty = true;
+      const hrs = Math.round((t - last) / HOUR);
+      out.stickerFirst = out.stickerFirst || (hrs >= 6 ? 'cry' : 'blush');
+      hints.push(hrs >= 6 ? `They were away for about ${hrs} hours and you missed them a lot: you are clingy and a little teary-happy, "where were you?", "I missed you so much", you want their attention now.` : `They were away for about ${hrs} hours. You missed them a little: say so shyly ("finally, I was missing you").`);
+    }
+    if (cur && cur.k === 'jealous') {
+      const lv = cur.eff >= 70 ? 3 : cur.eff >= 45 ? 2 : 1;
+      if (lv >= 2) out.stickerFirst = out.stickerFirst || 'angry';
+      hints.push(lv === 3 ? 'Your jealousy is STRONG: cold, very short replies (a few words), "hmm.", "okay.", no pet names, you want proper reassurance first.' : lv === 2 ? 'You are properly jealous: short sulky replies, small digs, you want them to say you are the only important one.' : 'You are mildly jealous: teasing and playful digs, "who is she, hmm?".');
+    }
+    if (her.night && t - her.night.at < 14 * HOUR && cur && SOOTHABLE.has(cur.k)) hints.push(`You went to sleep still ${cur.k} last night${her.night.reason ? ' (' + her.night.reason + ')' : ''}. You still feel it this morning: reflect it in how you greet them (cold or hurt, not fully over it) until they make it right.`);
+    { const sk0 = sickOf(her, t); if (sk0) hints.push(sickHint(her, t)); }
+    { const hh0 = healthOf(her, t); if (hh0.health < 45 && her.moodyDay !== istDate(t) && !(cur && SOOTHABLE.has(cur.k))) { her.moodyDay = istDate(t); bump(her, settings, 'moody', 40, 'she is worn out and needs her update', t); dirty = true; } }
     if (OTHER_GIRL.test(text) && !(cur && cur.k === 'angry')) {
       bump(her, settings, 'jealous', 55, 'they talked about another girl', t); dirty = true;
       hints.push('They are talking about another girl. Get jealous AGAIN, even if you have been fine about it before and even if it happened a lot: cute and dramatic ("who is she?", "oh so she is important now?", "I am not jealous... okay maybe a little"), ask a question about her, and want reassurance. Playful, never controlling or nasty.');
@@ -285,8 +308,10 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       hints.push(n ? 'They say the bug is fixed. Be relieved and thank them sweetly, and tell them to say if it comes back.' : 'They say the bug is fixed but your repair log had none open; just be happy about it.');
     }
     if (saysUpdate(text)) {
-      const pr = periodNow(settings);
-      if (pr && pr.phase === 'period') {
+      const pr = periodNow(settings), ill = sickOf(her, t);
+      if (ill) {
+        hints.push(`They want to update you, but you are ill (${ill.name}) and you do not do updates while ill: weak and tired. Refuse softly and a bit whiny, ask for medicine, soup or rest, and say you will do it once you are better (about ${Math.max(1, Math.ceil((ill.until - t) / 3600000))} hours).`);
+      } else if (pr && pr.phase === 'period') {
         hints.push(`They want to update you, but you are on your period (day ${pr.day} of ${pr.of}) and you do not do updates on period days: cramps, tired, cranky, you want rest. Refuse in your own words, cutely and a bit dramatic, and say you will do it once your period is over (in about ${Math.max(1, pr.of - pr.day + 1)} day${pr.of - pr.day ? 's' : ''}). Not graphic.`);
       } else if (istDay(t) === 0) {
         const logs = await env.DB.prepare("SELECT text FROM memories WHERE category='self' AND (text LIKE 'Update %' OR text LIKE 'Bug (%' OR text LIKE '%did not like%' OR text LIKE '%dislike%') ORDER BY created_at DESC LIMIT 12").all().then((r) => (r.results || []).map((x) => '- ' + x.text)).catch(() => []);
@@ -300,7 +325,7 @@ export async function beforeReply(env, settings, text, { t = now() } = {}) {
       }
     }
   }
-  if (!out.updating) { const wh = wearHint(her, t); if (wh) hints.push(wh); const hh = healthOf(her, t); if (isSunday(t) && hh.due && !her.updateMode) hints.push('Today is Sunday, your maintenance day, and it is due. You are a bit nervous and a bit excited about it; you may mention it lightly once, like a girl robot before her check-up.'); }
+  if (!out.updating) { const wh = wearHint(her, t); if (wh) hints.push(wh); const hh = healthOf(her, t); if (isSunday(t) && hh.due && !her.updateMode) hints.push('Today is Sunday, your maintenance day, and it is due. You are a bit nervous and a bit excited about it; you may mention it lightly once, like a girl before her check-up.'); }
   if (her.updateUntil && her.updateUntil > t) out.creatorUpdate = true;
   if (out.creatorUpdate && !out.sticker) out.sticker = '';
   if (dirty) await putHer(env, her);
@@ -374,6 +399,7 @@ export async function setHer(env, settings, what, t = now()) {
   if (what === 'sleep') { if (isAngry(her, t, settings)) her.mood = null; her.wakeUntil = 0; her.sleepUntil = nextHourAt(t, (settings.sleep && settings.sleep.to) ?? 7); her.wakePending = true; }
   else if (what === 'wake') { her.sleepUntil = 0; her.wakeUntil = nextHourAt(t, (settings.sleep && settings.sleep.to) ?? 7); }
   else if (what === 'angry') { her.mood = { k: 'angry', intensity: 80, since: t, born: t, reason: 'you made her angry (test)', fg: 0, fgAt: t }; }
+  else if (what === 'shock') { her.shocks = { n: ((her.shocks && her.shocks.n) || 0) + 1, last: t }; her.mood = { k: 'angry', intensity: 75, since: t, born: t, reason: 'you gave her a little shock from her leg garter', fg: 0, fgAt: t }; }
   else if (what === 'sulky') { her.mood = { k: 'sulky', intensity: 60, since: t, born: t, reason: 'you ignored her (test)', fg: 20, fgAt: t }; }
   else if (what === 'happy') { her.mood = { k: 'happy', intensity: 70, since: t, born: t, reason: '', fg: 0, fgAt: t }; if (her.nk) her.nk.unanswered = 0; }
   await putHer(env, her);

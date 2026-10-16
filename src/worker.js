@@ -20,13 +20,17 @@ import { habitSummary, setWater, addWater } from './lib/habits.js';
 import { listDates, createDate, deleteDate } from './lib/dates.js';
 import { runCare, careTick, lastActive } from './lib/care.js';
 import { grumpyAfterUpdate, getHer, putHer, bump, setHer, beforeReply, SEEN_LINE, applyChosenMood } from './lib/her.js';
-import { rollForce, forceGo, argueLine, attachFeedback, wakeDue, wakeUp, mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
+import { rollForce, forceGo, argueTurn, forceView, attachFeedback, wakeDue, wakeUp, mt as maintOf, viewOf, reportOf, startSession, finishSession, pendingSteps, setStep, tickStep, addBug, setBug, addWish, setWish, bumpPart, isSunday, healthOf } from './lib/maint.js';
 import { herView, moodKindNow } from './lib/tinymood.js';
 import { listDiary, writeDiary } from './lib/diary.js';
 import { outfitToday, outfitCount } from './lib/outfit.js';
 import { listAuto, saveAuto, deleteAuto, toggleAuto, runAuto } from './lib/auto.js';
 import { startCharge, batteryView, usePowerBank, powerLine, nightCharge } from './lib/battery.js';
 import { isSleeping } from './lib/her.js';
+import { sendStickerToOwner } from './lib/telegram.js';
+import { sickOf, sickView, careSick, makeSick, SICK } from './lib/sick.js';
+import { imageBytes } from './lib/extras.js';
+import { shockTick, startShock, shockView, levelOf } from './lib/shock.js';
 import { sundayStory } from './lib/maint.js';
 import { statusOf, periodView, monthOf, bondOf, prefsOf, cleanPrefs } from './lib/she.js';
 import { skillsOf, skillLevel, addSkill, delSkill } from './lib/skills.js';
@@ -64,6 +68,10 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const p = url.pathname;
+    if (p.startsWith('/img/')) {                       // pictures she drew (the id is a long random word)
+      const b = await imageBytes(env, p.slice(5).replace(/\.jpg$/, ''));
+      return b ? new Response(b, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' } }) : new Response('not found', { status: 404 });
+    }
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (p !== '/api/health') await ensureSchema(env);
@@ -121,6 +129,18 @@ async function route(request, env, ctx, url, p) {
     }
   }
 
+  // ---------- control switch: a shock from her leg garter ----------
+  if (p === '/api/shock') {
+    const st = await getSettings(env);
+    await shockTick(env, st).catch(() => null);
+    if (m === 'POST') {
+      const b = await readJson(request), r = await startShock(env, st, levelOf(b.level));
+      if (r.ok) sendStickerToOwner(env, r.level === 100 ? 'faint' : 'pain').catch(() => null);
+      return json({ ...r, view: shockView(await getHer(env)) }, r.ok ? 200 : 429);
+    }
+    return json({ view: shockView(await getHer(env)) });
+  }
+
   // ---------- her feelings (header chip + test buttons) ----------
   if (p === '/api/her') {
     const st = await getSettings(env);
@@ -139,20 +159,30 @@ async function route(request, env, ctx, url, p) {
       const b = await readJson(request), a = String(b.action || '');
       maintOf(her, t);
       if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); await putHer(env, her); }
-      if (a === 'argue') return json({ text: await argueLine(env, st, { reason: String(b.reason || ''), round: b.round, win: !!(her.maint.force && her.maint.force.win), period: !!(her.maint.force && her.maint.force.period), said: Array.isArray(b.said) ? b.said.slice(-3).map((x) => String(x).slice(0, 200)) : [] }) });
-      const pr = periodNow(st);
-      if ((a === 'start' || a === 'forceRoll' || a === 'forceStart') && isSleeping(st, her, t) && !her.updateMode) return json({ error: 'She is asleep. No update while she sleeps.' }, 400);
+      const pr = periodNow(st), sickNow = sickOf(her, t);
+      if ((a === 'start' || a === 'forceStart') && sickNow && !her.updateMode) return json({ error: `She has ${sickNow.name} and cannot do an update while she is ill. Give her medicine or soup, and try when she is better.` }, 400);
+      if ((a === 'start' || a === 'forceRoll' || a === 'forceTalk' || a === 'forceStart') && isSleeping(st, her, t) && !her.updateMode) return json({ error: 'She is asleep. No update while she sleeps.' }, 400);
       if ((a === 'start' || a === 'forceStart') && pr && pr.phase === 'period' && !her.updateMode) return json({ error: `She is on her period (day ${pr.day} of ${pr.of}) and does not do updates on period days. Try again in ${Math.max(1, pr.of - pr.day + 1)} day${pr.of - pr.day ? 's' : ''}.` }, 400);
+      if (a === 'forceTalk') {
+        if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
+        const line = String(b.text || '').trim().slice(0, 300); if (!line) return json({ error: 'Write something to her.' }, 400);
+        const fv0 = forceView(her, t);
+        if (!fv0) { const f = rollForce(her, line, t, Math.random(), { period: !!(pr && pr.phase === 'period'), sick: !!sickNow }); if (!f) return json({ error: 'You already used your forced update this week.' }, 400); }
+        else if (fv0.final) return json({ error: 'The argument is over for this week.' }, 400);
+        const r = await argueTurn(env, st, her, line, t);
+        await putHer(env, her);
+        return json({ ...r, view: viewOf(her, st, t, { sleeping: false }) });
+      }
       if (a === 'forceRoll') {
         if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
-        const f = rollForce(her, String(b.reason || ''), t, Math.random(), { period: !!(pr && pr.phase === 'period') });
+        const f = rollForce(her, String(b.reason || ''), t, Math.random(), { period: !!(pr && pr.phase === 'period'), sick: !!sickNow });
         if (!f) return json({ error: 'You already used your forced update this week. Next one after Sunday.' }, 400);
         await putHer(env, her);
         return json({ win: f.win });
       }
       if (a === 'forceStart') {
         if (her.updateMode && her.updateMode.since) return json({ error: 'She is already updating.' }, 400);
-        if (!forceGo(her, String(b.reason || ''), t)) return json({ error: 'She won this argument, no update today.' }, 400);
+        if (!forceGo(her, String(b.reason || ''), t)) return json({ error: 'She won this argument, or it is not finished yet.' }, 400);
       } else if (a === 'start') {
         if (!isSunday(t) && !b.force) return json({ error: 'She only does updates on Sunday.' }, 400);
         if (!her.maint.session) startSession(her, t);
@@ -214,6 +244,8 @@ async function route(request, env, ctx, url, p) {
       const b = await readJson(request), a = String(b.action || '');
       const pr = periodNow(st);
       if (a === 'skillAdd') { if (!addSkill(her, String(b.name || ''), { t })) return json({ error: 'Type a skill name, like Cooking.' }, 400); dirty = true; }
+      else if (a === 'sickCare') { const r = careSick(her, String(b.what || '')); if (!r.ok) return json({ error: r.reason === 'notsick' ? 'She is not ill.' : 'You already did that one.' }, 400); dirty = true; }
+      else if (a === 'makeSick') { makeSick(her, String(b.k || 'fever')); dirty = true; }
       else if (a === 'skillDel') { delSkill(her, String(b.id || '')); dirty = true; }
       else if (a === 'prefs') { her.prefs = { ...(her.prefs || {}), ...cleanPrefs(b.prefs) }; dirty = true; }
       else if (a === 'periodStart') {
@@ -245,7 +277,7 @@ async function route(request, env, ctx, url, p) {
       period: periodView(st2, t), month: monthOf(st2, /^\d{4}-\d{2}$/.test(ym) ? ym : today.slice(0, 7)), today,
       diary: await listDiary(env), outfitCount: await outfitCount(env).catch(() => 0),
       occasion: await (async () => { const occ = await getOcc(env), cnt = await outfitCount(env).catch(() => 0); return { birthday: occ.birthday, upcoming: upcoming(occ, t), today: todayOccasions(occ, t), tags: TAGS, wardrobe: Array.from({ length: cnt }, (_, i) => ({ n: i + 1, tag: tagOf(occ, i + 1) })), wearing: (outfit && outfit.n) || 0 }; })(),
-      skills: skillsOf(her).map((x) => ({ ...x, level: skillLevel(x) })), bond: await bondOf(env), prefs: prefsOf(her),
+      skills: skillsOf(her).map((x) => ({ ...x, level: skillLevel(x), waiting: x.installed === false })), sick: sickView(her), sickKinds: SICK.map((x) => ({ k: x.k, name: x.name })), bond: await bondOf(env), prefs: prefsOf(her),
     });
   }
 
@@ -560,8 +592,9 @@ async function chat(request, env, ctx) {
       const send = (o) => { try { controller.enqueue(enc.encode(JSON.stringify(o) + '\n')); } catch { /* client left */ } };
       send({ type: 'meta', convId: prep.convId, model: out.provider, fallback: out.fallback, at: now() });
       let full = '';
+      if (prep.image) { const pre = prep.pre ? prep.pre + '\n\n' : ''; send({ type: 'delta', text: pre + prep.image + '\n\n' }); full = pre + prep.image + '\n\n'; }
       try {
-        full = await readStream(out.body, (t) => send({ type: 'delta', text: t }), ac.signal);
+        full += await readStream(out.body, (t) => send({ type: 'delta', text: t }), ac.signal);
         if (!full.trim()) send({ type: 'error', error: "I couldn't think of a reply. Try again." });
         else send({ type: 'done' });
       } catch (e) {

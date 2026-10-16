@@ -26,7 +26,8 @@
     const cd = $('#mtCount'), dd = V.daysToSunday;
     cd.classList.toggle('today', !!V.sunday); $('#mtDays').textContent = V.sunday ? '!' : dd;
     $('#mtCountTxt').textContent = V.forced ? 'Sleeping in her update, back in ' + (V.forced.left >= 60 ? Math.floor(V.forced.left / 60) + ' h ' + (V.forced.left % 60) + ' min' : V.forced.left + ' min') : V.sunday ? (h.updating ? 'Update day, she is being repaired' : 'Update day is today') : 'Next update in ' + dd + ' day' + (dd === 1 ? '' : 's');
-    $('#mtPush').hidden = h.updating; $('#mtPush').disabled = !!V.forceUsed; $('#mtPush').textContent = V.forceUsed ? 'Force update (used this week)' : 'Force update';
+    $('#mtPush').hidden = h.updating; $('#mtPush').disabled = false; $('#mtPush').textContent = V.forceUsed ? 'Force update (used this week, see her answer)' : 'Force update';
+    { const bl = $('#mtBlock'); bl.textContent = ''; (V.blockers || []).forEach((x) => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = x.text; if (!x.good) c.style.background = 'rgba(244,114,182,.16)'; bl.appendChild(c); }); bl.hidden = !(V.blockers || []).length; }
     $('#mtStart').hidden = h.updating; $('#mtStart').textContent = V.sunday ? 'Start the update' : 'Start the update (Sunday only)';
     $('#mtStart').disabled = !V.sunday;
     // checklist
@@ -104,40 +105,40 @@
   const addBug = () => { const i = $('#mtBugIn'), v = i.value.trim(); if (!v) return; i.value = ''; call({ action: 'bugAdd', text: v, sev: $('#mtBugBig').checked ? 'big' : 'small' }); $('#mtBugBig').checked = false; };
   $('#mtBugAdd').addEventListener('click', addBug); $('#mtBugIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addBug(); } });
 
-  // ---------- force an update: she argues three times, then goes to sleep for 3 hours ----------
+  // ---------- force an update: a real argument (at least 5 replies from her), then she says yes or no ----------
   const modal = $('#mtModal'), log = $('#mtLog'), wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  let forcing = false;
+  let busy = false;
   const say = (who, text) => { const d = document.createElement('div'); d.className = 'b ' + who; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+  function paintModal() {
+    const f = V && V.force; log.textContent = '';
+    if (!f || !f.log.length) say('her', 'Why do you want to update me now? 🥲 It is not even Sunday.');
+    else f.log.forEach((x) => say(x.who === 'me' ? 'me' : 'her', x.text));
+    const open = !(f && f.final) && !(V && V.forceUsed && !f);
+    $('#mtReason').disabled = !open || busy; $('#mtSend').disabled = !open || busy;
+    $('#mtReason').placeholder = open ? 'Tell her why...' : f && f.final ? (f.win ? 'She said no. Try again next week.' : 'She agreed.') : 'Used this week.';
+    $('#mtCountLine').textContent = f ? (f.final ? 'The argument is over (' + f.round + ' of ' + f.rounds + ' replies).' + (f.win ? ' She won, no update.' : '') : 'Her replies: ' + f.round + ' of ' + f.rounds + '. She tells you her answer after the ' + f.rounds + 'th.') : 'She will argue with you for at least 5 replies, then tell you if she agrees.';
+  }
+  $('#mtPush').disabled = false;
   $('#mtPush').addEventListener('click', () => {
     if (V && V.health.updating) return;
-    log.textContent = ''; forcing = false; $('#mtReason').value = ''; $('#mtReason').disabled = false; $('#mtSend').disabled = false;
-    say('her', 'Why do you want to update me now? 🥲 It is not even Sunday.');
-    modal.hidden = false; setTimeout(() => $('#mtReason').focus(), 50);
+    $('#mtReason').value = ''; paintModal(); modal.hidden = false; setTimeout(() => { if (!$('#mtReason').disabled) $('#mtReason').focus(); }, 50);
   });
-  const closeModal = () => { modal.hidden = true; forcing = false; };
-  $('#mtCancel').addEventListener('click', () => { if (!forcing) closeModal(); else closeModal(); });
+  const closeModal = () => { modal.hidden = true; $('#mtRobot').hidden = true; };
+  $('#mtCancel').addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
   async function send() {
-    const reason = $('#mtReason').value.trim(); if (!reason || forcing) return;
-    forcing = true; $('#mtReason').value = ''; $('#mtReason').disabled = true; $('#mtSend').disabled = true;
-    say('me', reason);
-    const said = [];
-    let win = false;
-    try { win = (await App.api('/api/maint', { body: { action: 'forceRoll', reason } })).win; } catch (e) { App.toast(e.message); closeModal(); return; }
-    for (let r = 1; r <= 3; r++) {
-      await wait(900); if (modal.hidden) return;
-      let text = '';
-      try { text = (await App.api('/api/maint', { body: { action: 'argue', reason, round: r, said } })).text; } catch (e) { text = 'But... why today? Can it wait till Sunday?'; }
-      if (modal.hidden) return;
-      said.push(text); say('her', text);
+    const text = $('#mtReason').value.trim(); if (!text || busy) return;
+    busy = true; $('#mtReason').value = ''; say('me', text); $('#mtReason').disabled = true; $('#mtSend').disabled = true;
+    let d = null;
+    try { d = await App.api('/api/maint', { body: { action: 'forceTalk', text } }); } catch (e) { App.toast(e.message); busy = false; await load(); paintModal(); return; }
+    V = d.view; await wait(700); say('her', d.text); busy = false; paintModal();
+    if (d.final) {
+      if (d.win) { await wait(600); load(); return; }
+      $('#mtRobot').hidden = false; await wait(2600); if (modal.hidden) return;
+      const r = await call({ action: 'forceStart', reason: text });
+      closeModal();
+      if (r) { App.toast('She agreed. She is going to sleep for 3 hours.', 4500); if (App.refreshHer) App.refreshHer(); }
     }
-    await wait(1200); if (modal.hidden) return;
-    if (win) { const onP = App.herState && App.herState.period && App.herState.period.phase === 'period'; say('her', onP ? 'No. I am on my period, I am not doing any update now. You lost this one. Try next week. 😤' : 'Nope. I won this one, no update today. Try again next week.'); await wait(2200); closeModal(); load(); return; }
-    say('her', 'Okay... do it, but little quick, okay? 😮‍💨');
-    await wait(1600); if (modal.hidden) return;
-    const d = await call({ action: 'forceStart', reason });
-    closeModal();
-    if (d) { App.toast('She is going to sleep for 3 hours.', 4000); if (App.refreshHer) App.refreshHer(); }
   }
   $('#mtSend').addEventListener('click', send);
   $('#mtReason').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } });

@@ -36,7 +36,7 @@
   let personaReady = false;
   function setSeg(id, val) { $$('#' + id + ' button').forEach((b) => b.classList.toggle('on', b.dataset.v === val)); }
   function fillPersona(s) {
-    setSeg('segGender', s.persona.gender); setSeg('segUser', s.userGender || 'boy'); setSeg('segVibe', s.persona.vibe); setSeg('segLang', s.persona.language); setSeg('segBrain', s.brain); setSeg('segVGirl', s.voice.girl); setSeg('segVBoy', s.voice.boy);
+    setSeg('segUser', s.userGender || 'boy'); setSeg('segVibe', s.persona.vibe); setSeg('segLang', s.persona.language); setSeg('segBrain', s.brain); setSeg('segVGirl', s.voice.girl);
     if (document.activeElement !== $('#pName')) $('#pName').value = s.persona.name;
     if (document.activeElement !== $('#uName')) $('#uName').value = s.userName;
     if (document.activeElement !== $('#pCustom')) $('#pCustom').value = s.persona.custom;
@@ -46,16 +46,44 @@
   function wirePersona() {
     if (personaReady) return; personaReady = true;
     const seg = (id, fn) => $('#' + id).addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) fn(b.dataset.v); });
-    seg('segGender', (v) => { const wasDefault = ['Tiny', 'Byte'].includes(App.settings.persona.name); App.saveSettings({ persona: { gender: v, ...(wasDefault ? { name: v === 'boy' ? 'Byte' : 'Tiny' } : {}) } }).then(() => App.swapCharacter()); });
     seg('segUser', (v) => App.saveSettings({ userGender: v }));
     seg('segVibe', (v) => App.saveSettings({ persona: { vibe: v } }));
     seg('segVGirl', (v) => App.saveSettings({ voice: { girl: v } }).then(() => $('#vTest').click()));
-    seg('segVBoy', (v) => App.saveSettings({ voice: { boy: v } }).then(() => $('#vTest').click()));
     seg('segLang', (v) => App.saveSettings({ persona: { language: v } }));
     seg('segBrain', (v) => App.saveSettings({ brain: v }));
     const debounce = (fn, ms = 600) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
     $('#pName').addEventListener('input', debounce(() => App.saveSettings({ persona: { name: $('#pName').value } })));
     $('#uName').addEventListener('input', debounce(() => App.saveSettings({ userName: $('#uName').value })));
+    { // control switch: a tiny shock from her leg garter (trains her not to go out of control)
+      const sm = $('#shockModal'); document.body.appendChild(sm);
+      let lvl = 50, timer = null;
+      const fmt = (sec) => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+      function paint(v) {
+        const img = $('#shockImg'), busy = v.phase === 'on' || v.phase === 'faint';
+        img.src = busy ? '/images/update/shock2.webp' : '/images/update/shock.webp';
+        let line = 'Today: ' + v.used + ' of ' + v.limit + ' used.';
+        if (v.phase === 'on') line = 'Zap! She is getting the current... ' + fmt(v.endsIn);
+        else if (v.phase === 'faint') line = 'She fainted. She wakes up in ' + fmt(v.endsIn) + '.';
+        else if (v.cooldownSec > 0) line += ' Wait ' + fmt(v.cooldownSec) + ' before the next one.';
+        else if (v.left <= 0) line = 'That is enough for today. Let her rest.';
+        $('#shockLine').textContent = line;
+        $('#shockGo').disabled = busy || v.left <= 0 || v.cooldownSec > 0 || (lvl === 100 && v.fullUsed);
+        if (lvl === 100 && v.fullUsed && !busy) $('#shockLine').textContent += ' 100% is only once a day.';
+      }
+      async function poll() { try { const d = await App.api('/api/shock'); paint(d.view); if (App.refreshHer) App.refreshHer(); } catch { /* ignore */ } }
+      const open = () => { sm.hidden = false; poll(); timer = setInterval(poll, 4000); };
+      const close = () => { sm.hidden = true; clearInterval(timer); };
+      $('#shockOpen').addEventListener('click', open);
+      $('#shockClose').addEventListener('click', close);
+      sm.addEventListener('click', (e) => { if (e.target === sm) close(); });
+      $('#segShock').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; lvl = +b.dataset.v; [...$('#segShock').children].forEach((x) => x.classList.toggle('on', x === b)); poll(); });
+      $('#shockGo').addEventListener('click', async () => {
+        const img = $('#shockImg'); $('#shockGo').disabled = true;
+        img.classList.remove('zap'); void img.offsetWidth; img.classList.add('zap');
+        try { const d = await App.api('/api/shock', { body: { level: lvl } }); paint(d.view); }
+        catch (e) { App.toast(e.message || 'Could not do that.'); poll(); }
+      });
+    }
     $('#pCustom').addEventListener('input', debounce(() => App.saveSettings({ persona: { custom: $('#pCustom').value } }), 900));
     $('#vAuto').addEventListener('change', (e) => App.saveSettings({ voice: { autoplay: e.target.checked } }));
     $('#vBrowser').addEventListener('change', (e) => App.saveSettings({ voice: { engine: e.target.checked ? 'browser' : 'auto' } }));

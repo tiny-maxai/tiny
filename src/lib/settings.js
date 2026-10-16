@@ -40,7 +40,7 @@ export function clean(raw) {
   const p = r.persona || {};
   const v = r.voice || {};
   const ch = r.chat || {}, mo = r.mood || {}, my = r.missYou || {}, pe = r.period || {}, sl = r.sleep || {}, he = r.her || {}, am = r.ambient || {}, br = r.briefing || {}, ba = r.battery || {};
-  const gender = p.gender === 'boy' ? 'boy' : 'girl';
+  const gender = 'girl';                                  // she is always a girl
   const di = r.diary || {}, ou = r.outfit || {};
   return {
     userName: str(r.userName, 60),
@@ -49,7 +49,7 @@ export function clean(raw) {
     outfit: { enabled: ou.enabled !== false },
     persona: {
       gender,
-      name: str(p.name, 30) || (gender === 'boy' ? 'Byte' : 'Tiny'),
+      name: (str(p.name, 30) === 'Byte' ? '' : str(p.name, 30)) || 'Tiny',
       vibe: VIBES.includes(p.vibe) ? p.vibe : 'cute',
       language: LANGS.includes(p.language) ? p.language : 'auto',
       custom: str(p.custom, 1500),

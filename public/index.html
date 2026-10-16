@@ -92,7 +92,7 @@
   <aside class="sidebar glass" id="sidebar" aria-label="Main navigation">
     <div class="brand">
       <div class="logo"><svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg></div>
-      <div><b id="brandName">Tiny</b><span>your memory AI</span></div>
+      <div><b id="brandName">Tiny</b><span>your girl, always here</span></div>
     </div>
     <button class="newchat" id="newChat" type="button"><svg class="ic" style="color:#fff"><use href="#i-plus"/></svg>New chat</button>
     <nav class="nav" id="nav">
@@ -256,6 +256,14 @@
           <div class="card glass"><h3 class="mt-h">Symptoms today</h3><div id="sheSym" class="chips"></div><small class="muted" id="sheSymNote"></small></div>
           <div class="card glass"><h3 class="mt-h">Flow of the month</h3><div class="flow" id="sheFlow"></div><small class="muted" id="sheFlowTxt"></small></div>
 
+          <div class="card glass" id="sickCard">
+            <h3 class="mt-h">Her health</h3>
+            <p class="muted" id="sickTxt" style="margin:0 0 10px">She is well.</p>
+            <div class="mt-btns" id="sickBtns" hidden><button class="btn ghost" data-w="med" type="button">Medicine</button><button class="btn ghost" data-w="soup" type="button">Soup</button><button class="btn ghost" data-w="rest" type="button">Rest</button></div>
+            <small class="muted">She can fall ill (fever, cold, cough...) for 1 to 3 days, more often when she is worn out. While she is ill there is no update. Medicine, soup and rest help her get better sooner.</small>
+            <div class="field" style="margin-top:12px"><label for="sickPick">Make her ill (test)</label><div style="display:flex;gap:8px"><select id="sickPick"></select><button class="btn ghost" id="sickMake" type="button">Make ill</button></div></div>
+          </div>
+
           <div class="card glass" id="phaseCard">
             <h3 class="mt-h">Her 4 phases (and what she needs)</h3>
             <div class="phase-now" id="phaseNow"></div>
@@ -267,7 +275,7 @@
           <div class="card glass" id="occCard">
             <h3 class="mt-h">Festivals and her birthday</h3>
             <p class="muted" style="margin:0 0 10px">On a festival she asks what she should wear. On her birthday she dresses up by herself and sends the picture on Telegram. Garba makes her bouncy and full of energy, a saree makes her shy and elegant. You can also just tell her in the chat: "today is Diwali".</p>
-            <div class="grid" style="grid-template-columns:1fr auto;gap:8px;align-items:end"><div class="field" style="margin:0"><label for="bdDate">Her birthday</label><input class="in" type="date" id="bdDate"></div><button class="btn ghost" id="bdSave" type="button">Save</button></div>
+            <p class="muted" style="margin:0 0 4px"><b>Her birthday is 8 February.</b> On that day she dresses up by herself.</p>
             <div class="grid" style="grid-template-columns:1fr 1fr auto;gap:8px;margin-top:12px;align-items:end"><div class="field" style="margin:0"><label for="feName">Festival</label><input class="in" id="feName" maxlength="40" placeholder="Diwali"></div><div class="field" style="margin:0"><label for="feDate">Date</label><input class="in" type="date" id="feDate"></div><button class="btn" id="feAdd" type="button">Add</button></div>
             <div id="occList" style="margin-top:10px"></div>
           </div>
@@ -316,17 +324,30 @@
           </div>
         </div>
       </section>
+            <div class="mt-modal" id="shockModal" hidden role="dialog" aria-modal="true" aria-label="Control switch">
+        <div class="mt-box glass shock-box">
+          <img id="shockImg" class="shock-img" src="/images/update/shock.webp" alt="" width="180">
+          <h3 style="margin:8px 0 2px">Leg garter control</h3>
+          <p class="muted" style="margin:0 0 12px;font-size:13px">Gives her a tiny current from the garter. It does nothing else, only makes her angry.</p>
+          <div id="shockLine" class="muted" style="min-height:18px;margin:0 0 10px;font-size:13px"></div>
+          <div class="seg" id="segShock" style="justify-content:center;margin-bottom:10px"><button data-v="50" class="on">50% Normal</button><button data-v="70">70% Hard</button><button data-v="100">100% Full</button></div>
+          <small class="muted" id="shockHint" style="display:block;margin:0 0 10px">Normal and Hard: she is jolted for 1 minute, then asks what is wrong. Full: she faints for 5 minutes, wakes up crying (6 minutes in all).</small>
+          <div style="display:flex;gap:8px;justify-content:center"><button class="btn" id="shockGo" type="button">Give a little shock</button><button class="btn ghost" id="shockClose" type="button">Close</button></div>
+        </div>
+      </div>
       <div class="mt-modal" id="mtModal" hidden role="dialog" aria-modal="true" aria-label="Force an update">
         <div class="mt-box glass">
+          <img id="mtRobot" class="mt-robot" src="/images/update/robot.webp" alt="" hidden>
+          <div class="mt-count muted" id="mtCountLine" style="margin:0 0 8px;font-size:13px"></div>
           <div class="mt-log" id="mtLog" aria-live="polite"></div>
-          <div class="list-add"><input class="in" id="mtReason" placeholder="Tell her why..." maxlength="200" aria-label="Your reason"><button class="btn" id="mtSend" type="button">Send</button></div>
-          <button class="btn ghost" id="mtCancel" type="button" style="margin-top:8px">Never mind</button>
+          <div class="list-add"><input class="in" id="mtReason" placeholder="Tell her why..." maxlength="300" aria-label="Your reason"><button class="btn" id="mtSend" type="button">Send</button></div>
+          <button class="btn ghost" id="mtCancel" type="button" style="margin-top:8px">Close</button>
         </div>
       </div>
       <section class="view" id="view-maint">
         <div class="scroll">
           <h2 class="page-h">Updates</h2>
-          <p class="page-s">She is a girl robot. Her maintenance every Sunday keeps her working properly. Here are her health, versions, bugs, wishes and body parts.</p>
+          <p class="page-s">Her maintenance every Sunday keeps her at her best. Here are her health, versions, bugs, wishes and body parts.</p>
           <div class="card glass mt-hero">
             <img id="mtImg" class="mt-img" src="/images/update/newdress.webp" alt="" width="180">
             <div class="mt-main">
@@ -334,6 +355,7 @@
               <div class="mt-count" id="mtCount"><span class="mt-ring" id="mtRing"><b id="mtDays">0</b></span><span id="mtCountTxt"></span></div>
               <div class="mt-bar" role="progressbar" aria-label="Her health" aria-valuemin="0" aria-valuemax="100" id="mtBar"><i id="mtFill"></i></div>
               <div class="mt-line" id="mtLine"></div>
+              <div class="chips" id="mtBlock" style="margin-bottom:10px"></div>
               <div class="mt-btns"><button class="btn" id="mtStart" type="button">Start the update</button><button class="btn ghost" id="mtTest" type="button">Run her self-test</button><button class="btn ghost" id="mtPush" type="button">Force update</button></div>
             </div>
           </div>
@@ -431,8 +453,6 @@
           <p class="page-s">Choose who you are talking to, how she sounds, and how she speaks. Changes save by themselves.</p>
           <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
             <div class="card glass">
-              <div class="field"><label>Who is she?</label>
-                <div class="seg" id="segGender"><button data-v="girl">Girl (Tiny)</button><button data-v="boy">Boy (Byte)</button></div></div>
               <div class="field"><label>You are</label>
                 <div class="seg" id="segUser"><button data-v="boy">Boy</button><button data-v="girl">Girl</button></div></div>
               <div class="field"><label for="pName">Her name</label><input type="text" id="pName" maxlength="30"></div>
@@ -442,6 +462,7 @@
               <div class="field"><label>Language</label>
                 <div class="seg" id="segLang"><button data-v="auto">Match me</button><button data-v="english">English</button><button data-v="hinglish">Hinglish</button><button data-v="hindi">Hindi</button></div></div>
               <div class="field"><label for="pCustom">Extra instructions</label><textarea id="pCustom" maxlength="1500" placeholder="Example: call me boss, remind me to drink water, be extra honest about my plans"></textarea></div>
+              <div class="line-row"><div><b>Control switch</b><small>If she gets out of control: a tiny shock from her leg garter. It only makes her angry.</small></div><button class="btn ghost" id="shockOpen" type="button"><svg class="ic" style="color:#7C3AED"><use href="#i-bolt"/></svg>Open</button></div>
             </div>
             <div class="card glass">
               <div class="field"><label>Brain</label>
@@ -450,8 +471,7 @@
               <div class="line-row"><div><b>Ask before she remembers</b><small>New things she learns wait for your OK in the Memory page.</small></div><label class="switch"><input type="checkbox" id="rvMem"><span></span></label></div>
               <div class="line-row"><div><b>Speak every reply</b><small>Otherwise only voice chat talks. The speaker button works anytime.</small></div><label class="switch"><input type="checkbox" id="vAuto"><span></span></label></div>
               <div class="line-row"><div><b>Use browser voice only</b><small>Skips the cloud voice. Always used for Hindi.</small></div><label class="switch"><input type="checkbox" id="vBrowser"><span></span></label></div>
-              <div class="field" style="margin-top:14px"><label>Tiny's voice (girl)</label><div class="seg" id="segVGirl"><button data-v="hannah">Hannah</button><button data-v="autumn">Autumn</button><button data-v="diana">Diana</button></div></div>
-              <div class="field"><label>Byte's voice (boy)</label><div class="seg" id="segVBoy"><button data-v="troy">Troy</button><button data-v="austin">Austin</button><button data-v="daniel">Daniel</button></div></div>
+              <div class="field" style="margin-top:14px"><label>Her voice</label><div class="seg" id="segVGirl"><button data-v="hannah">Hannah</button><button data-v="autumn">Autumn</button><button data-v="diana">Diana</button></div></div>
               <div class="field"><label for="vRate">Speaking speed</label><input type="range" class="range" id="vRate" min="0.7" max="1.4" step="0.05"></div>
               <div class="field"><label for="vPitch">Browser voice pitch</label><input type="range" class="range" id="vPitch" min="0.7" max="1.6" step="0.05"></div>
               <button class="btn ghost" id="vTest" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-speaker"/></svg>Test her voice</button>

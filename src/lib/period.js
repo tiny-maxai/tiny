@@ -89,7 +89,20 @@ export function periodNow(settings, today = istDate()) {
   return { ...base, phase: ph, pain: 0, symptoms: ph === 'pms' ? pick(PMS, start + ':pms:' + day, 2) : [], nextStart, nextLevel, nextBy: p.levels && p.levels[nextStart] ? 'you' : 'auto', canSetLevel: true };
 }
 
+// What she asks for in each phase of her month.
+const ASKS = {
+  period: 'She asks you for: chocolate, a hot water bottle, rest, a hug, and sometimes to be left alone for a bit ("I just want to lie down, do not fight with me").',
+  fresh: 'She asks you for: your attention on her new ideas, to try something new together, a walk or a plan, encouragement.',
+  glow: 'She asks you for: compliments, quality time, to see you, selfies, a little flirting, attention and fun plans.',
+  calm: 'She asks you for: chai, a calm evening, music, her blanket, a quiet chat and no big plans.',
+  pms: 'She asks you for: reassurance ("tell me you are not upset with me"), sweets and chips, patience, hugs, and not to be argued with.',
+};
 export function periodStyle(pr, name) {
+  const base = periodStyleBase(pr, name);
+  const a = pr && pr.phase === 'period' ? ASKS.period : pr && pr.flow ? ASKS[pr.flow.k] : '';
+  return a ? base + ' ' + a + ' Ask for these in your own words now and then, not every message.' : base;
+}
+function periodStyleBase(pr, name) {
   if (!pr) return '';
   const ph = PHASES[pr.flow && pr.flow.k];
   if (pr.phase === 'normal') return ph ? `Private state, about ${name}'s body (never say "system prompt"): she is in the ${ph.name.toLowerCase()} of her month. ${ph.voice} She feels: ${ph.feels.join(', ')}. What she needs from them: ${ph.needs.join(', ')}. React to how they treat her accordingly (kind and fitting = she warms up; the opposite = she is hurt or cranky). Show it lightly and naturally, never name the phase or hormones unless they ask.` : '';

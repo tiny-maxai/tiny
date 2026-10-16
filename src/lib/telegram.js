@@ -1,9 +1,12 @@
 // Telegram bot: same brain, same memories as the website. Only OWNER_TG_ID may talk to it.
+import { startShock, shockView, levelOf } from './shock.js';
+import { statusText, setQuiet, parseQuiet, quietLeft, SOOTHE_ROWS, wantsSootheButtons, soothePress, speechKind, shapeSpeech, voiceStyle, moodPace, typos, makeImage, imageBytes, SICK_BTN } from './extras.js';
+import { careSick, sickOf } from './sick.js';
 import { chatOnce, finishChat, sleepTurn } from './chat.js';
 import { beforeReply, sleepingLine, getHer, putHer } from './her.js';
 import { startCharge, batteryView, usePowerBank, powerLine } from './battery.js';
 import { herView, moodKindNow } from './tinymood.js';
-import { reportOf, viewOf } from './maint.js';
+import { reportOf, viewOf, healthOf } from './maint.js';
 import { getOcc, putOcc, addFestival, chooseWear, tagOf } from './occasion.js';
 import { getAmbient } from './ambient.js';
 import { periodNow, painLine } from './period.js';
@@ -12,7 +15,7 @@ import { remember } from './memory.js';
 import { speechToText, textToSpeech } from './voice.js';
 import { getSettings, saveSettings } from './settings.js';
 import { getToday } from './today.js';
-import { plainForSpeech, clip, safeEqual } from './util.js';
+import { plainForSpeech, clip, safeEqual, plainChat } from './util.js';
 import { saveMood, moodReply } from './moods.js';
 import { MOOD_BUTTONS } from './care.js';
 import { wantsFile, makeFile } from './files.js';
@@ -51,17 +54,25 @@ export const sendStickerToOwner = async (env, name) => {
 // A small "seen" mark on your message (used while she sleeps).
 const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { chat_id: chat, message_id: messageId, reaction: [{ type: 'emoji', emoji }] }).catch(() => null);
 
+// Telegram button colours: primary (blue), success (green), danger (red). Each kind of button gets its own colour.
+const BTN_STYLE = { 'soothe:sorry': 'primary', 'soothe:gift': 'success', 'soothe:joke': 'danger', 'soothe:calm': 'success', 'sick:med': 'danger', 'sick:soup': 'success', 'sick:rest': 'primary', 'mood:1': 'danger', 'mood:2': 'danger', 'mood:3': 'primary', 'mood:4': 'success', 'mood:5': 'success' };
+const styleFor = (d) => BTN_STYLE[d] || (/^wear:/.test(d) ? 'success' : /^water:/.test(d) ? 'primary' : undefined);
 export async function sendWithButtons(env, chat, text, rows) {
-  return api(env, 'sendMessage', { chat_id: chat, text: text.slice(0, 3900), reply_markup: { inline_keyboard: rows.map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } });
+  return api(env, 'sendMessage', { chat_id: chat, text: text.slice(0, 3900), reply_markup: { inline_keyboard: rows.map((r) => r.map((b) => { const st = b.style || styleFor(b.data); return { text: b.text, callback_data: b.data, ...(st ? { style: st } : {}) }; })) } });
 }
 export async function sendVoice(env, chat, text) {
   try {
     const st = await getSettings(env);
-    const v = await textToSpeech(env, clip(plainForSpeech(text), 900), { mood: await moodKindNow(env, st).catch(() => null), gender: st.persona.gender, language: st.persona.language, mp3: true });
+    const mk = await moodKindNow(env, st).catch(() => null), sk = speechKind(await getHer(env), st, mk);
+    const v = await textToSpeech(env, shapeSpeech(clip(plainForSpeech(text), 900), sk), { mood: mk, style: voiceStyle(sk), gender: st.persona.gender, language: st.persona.language, mp3: true });
     const post = (method, field) => { const fd = new FormData(); fd.append('chat_id', String(chat)); fd.append(field, new Blob([v.bytes], { type: v.mime }), 'reply.' + v.ext); return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({})); };
     const r = await post('sendVoice', 'voice');                       // a real voice-note bubble
     if (!r || !r.ok) await post('sendAudio', 'audio');                // fallback: audio file
   } catch (e) { console.error('[tg voice]', e && e.message); }
+}
+export async function sendPhotoBytes(env, chat, bytes, caption) {
+  const fd = new FormData(); fd.append('chat_id', String(chat)); if (caption) fd.append('caption', caption.slice(0, 900)); fd.append('photo', new Blob([bytes], { type: 'image/jpeg' }), 'drawing.jpg');
+  return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({}));
 }
 export async function sendPhoto(env, chat, url, caption) {
   const r = await api(env, 'sendPhoto', { chat_id: chat, photo: url, caption: String(caption || '').slice(0, 900) });
@@ -133,6 +144,21 @@ async function handleButton(env, cq) {
   await api(env, 'answerCallbackQuery', { callback_query_id: cq.id });
   if (!env.OWNER_TG_ID || String(cq.from && cq.from.id) !== String(env.OWNER_TG_ID)) return;
   const chat = cq.message && cq.message.chat && cq.message.chat.id;
+  if (/^soothe:(sorry|gift|joke|calm)$/.test(cq.data || '')) {
+    const st = await getSettings(env), r = await soothePress(env, st, cq.data.slice(7));
+    if (chat) { if (r.done || r.melted) await send(env, chat, r.text); else await sendWithButtons(env, chat, r.text, SOOTHE_ROWS); await sendSticker(env, chat, r.sticker).catch(() => false); }
+    return;
+  }
+  if (/^sick:(med|soup|rest)$/.test(cq.data || '')) {
+    const her = await getHer(env), r = careSick(her, cq.data.slice(5));
+    if (r.ok) await putHer(env, her);
+    if (chat) {
+      const say = { med: 'Thank you... I took the medicine. 🤍', soup: 'Mmm, warm soup... thank you, this feels so good.', rest: 'Okay, I am lying down now. Stay with me a little?' };
+      await send(env, chat, !r.ok ? (r.reason === 'notsick' ? 'I am fine now, thank you! 🙂' : 'You already did that one, thank you. 🤍') : say[cq.data.slice(5)] + (r.better ? ' I think I am almost better!' : ` (maybe ${r.left} more hours...)`));
+      if (r.ok) await sendSticker(env, chat, 'smile').catch(() => false);
+    }
+    return;
+  }
   const w = /^water:(\d+)$/.exec(cq.data || '');
   if (w) {
     const n = await setWater(env, w[1]);
@@ -156,11 +182,11 @@ async function handleButton(env, cq) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Sends a reply like texting: each short thought is its own message, with a typing pause between them.
-async function sendBubbles(env, chat, text, bubbles) {
+async function sendBubbles(env, chat, text, bubbles, buttons = null) {
   const parts = bubbles && !/```/.test(text) && text.length < 900 ? text.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean).slice(0, 4) : [text];
   for (let i = 0; i < parts.length; i++) {
     if (i > 0) { await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' }); await sleep(Math.min(1800, 500 + parts[i].length * 14)); }
-    await send(env, chat, parts[i]);
+    if (buttons && i === parts.length - 1) await sendWithButtons(env, chat, parts[i], buttons); else await send(env, chat, parts[i]);
   }
 }
 
@@ -233,6 +259,35 @@ async function processMessage(env, msg) {
     const her = await getHer(env), rep = await reportOf(env, her, settings, { deep: /deep|test/i.test(rest) });
     const icon = { good: 'OK', tired: 'TIRED', 'needs fixing': 'FIX' };
     await send(env, chat, `${settings.persona.name}'s health: ${rep.health.health}% (${rep.health.state}) | ${viewOf(her, settings).version}\n${rep.health.due ? (rep.health.overdueDays ? 'Maintenance is overdue.' : 'Maintenance is due today.') : 'Maintenance done for this week.'}\n\n` + rep.checks.map((c) => `${icon[c.status] || c.status}  ${c.name}: ${c.note}`).join('\n') + '\n\n/health test  runs a real thinking test');
+    return;
+  }
+  if (/^\/status\b/i.test(cmd)) { await send(env, chat, await statusText(env, settings)); return; }
+  if (/^\/quiet\b/i.test(cmd)) {
+    if (!rest) { const q = await quietLeft(env); await send(env, chat, q ? `Quiet hours are on, ${Math.ceil(q / 60000)} min left. /quiet off to stop.` : 'Usage: /quiet 2h  (or 30m). /quiet off to stop. While it is on she sends you nothing; she still answers when you write.'); return; }
+    const mins = parseQuiet(rest);
+    if (mins === null) { await send(env, chat, 'Use /quiet 2h, /quiet 30m or /quiet off.'); return; }
+    await setQuiet(env, mins);
+    await send(env, chat, mins ? `Okay, I will stay quiet for ${mins >= 60 ? Math.round(mins / 6) / 10 + ' h' : mins + ' min'}. I will still answer if you write to me.` : 'Okay, quiet hours are off.');
+    return;
+  }
+  if (/^\/(medicine|sick|care)\b/i.test(cmd)) {
+    const her = await getHer(env), s = sickOf(her);
+    if (!s) { await send(env, chat, 'I am not ill right now. 🙂'); return; }
+    await sendWithButtons(env, chat, `I have ${s.name}. Tap what you want to give me.`, SICK_BTN); return;
+  }
+  if (/^\/(image|draw)\b/i.test(cmd)) {
+    if (!rest) { await send(env, chat, 'Tell me what to draw: /image a cute cat with a purple scarf'); return; }
+    await send(env, chat, 'Okay, wait, let me draw it...'); await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_photo' });
+    try { const id = await makeImage(env, rest), bytes = await imageBytes(env, id); if (bytes) await sendPhotoBytes(env, chat, bytes, 'Look, I made it! Do you like it?'); } catch (e) { await send(env, chat, e.message || 'I could not draw that right now.'); }
+    return;
+  }
+  if (/^\/shock\b/i.test(cmd)) {
+    const v0 = shockView(await getHer(env));
+    if (!rest.trim()) { await send(env, chat, `Control switch (a tiny current from her leg garter).\n/shock 50  normal\n/shock 70  hard\n/shock 100  full (she faints for 5 min)\nToday: ${v0.used} of ${v0.limit} used.`); return; }
+    const r = await startShock(env, settings, levelOf(rest.trim()));
+    if (!r.ok) { await send(env, chat, r.error); return; }
+    await send(env, chat, r.level === 100 ? '⚡⚡ AAAH!! ...' : '⚡ Ow!! Wait, wait...');
+    await sendSticker(env, chat, r.level === 100 ? 'faint' : 'pain').catch(() => false);
     return;
   }
   if (/^\/power/i.test(cmd)) {
@@ -310,13 +365,26 @@ async function processMessage(env, msg) {
     return;
   }
   await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
+  // her mood decides how fast she answers: angry = reads and replies late, clingy = instantly, sleepy or ill = slow with typos
+  let pace = { delay: 0, react: '' };
+  try {
+    const mk = await moodKindNow(env, settings).catch(() => 'normal'), her0 = gate.her || await getHer(env);
+    pace = moodPace(sickOf(her0) ? 'sick' : mk, healthOf(her0).health < 45);
+    if (gate.stickerFirst) await sendSticker(env, chat, gate.stickerFirst).catch(() => false);
+    if (pace.react) await react(env, chat, msg.message_id, pace.react);
+    for (let w = 0; w < pace.delay; w += 4000) { await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' }); await sleep(Math.min(4000, pace.delay - w)); }
+  } catch { /* answer normally */ }
   const wantVoice = via === 'voice' || settings.voice.autoplay;
   try {
     const solving = Boolean(fileCtx) && (SOLVE_WORDS.test(text) || (mediaKind === 'picture' && /^Solve this question/.test(text)));
     const chatText = (fileCtx ? fileCtx + '\n\n' : '') + (solving ? SOLVE_RULES + '\n\n' : '') + (quoted ? `(I am replying to this earlier message: "${quoted}")\n\n${text}` : text);
     const r = await chatOnce(env, { convId, text: chatText, source: 'telegram', via, spoken: wantVoice, gate, brain: solving ? 'solve' : undefined });
     if (!convId) await env.KV.put(kvKey, r.convId);
-    if (wantVoice) await send(env, chat, r.reply); else await sendBubbles(env, chat, r.reply, settings.chat.bubbles);
+    if (r.pre) { await send(env, chat, r.pre); await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_photo' }); await sleep(3500); }   // "please wait, I am changing..."
+    if (r.image && /\/img\/[a-z0-9]+\.jpg/i.test(r.image)) { const bytes = await imageBytes(env, /\/img\/([a-z0-9]+)\.jpg/i.exec(r.image)[1]); if (bytes) await sendPhotoBytes(env, chat, bytes, ''); }
+    else if (r.image) { const origin = await env.KV.get('origin').catch(() => null), pm = /outfit-\d+\.webp/.exec(r.image); if (origin && pm) await sendPhoto(env, chat, origin + '/images/outfits/' + pm[0], '').catch(() => false); }
+    const clean = solving ? r.reply : plainChat(r.reply), shown = pace.typos ? typos(clean) : clean, btns = wantsSootheButtons(await getHer(env), settings) ? SOOTHE_ROWS : null;
+    if (wantVoice) await send(env, chat, shown); else await sendBubbles(env, chat, shown, settings.chat.bubbles, btns);
     if (gate.sticker) await sendSticker(env, chat, gate.sticker).catch(() => false);   // repairing / new dress
     if (wantVoice) await sendVoice(env, chat, r.reply);
     await finishChat(env, { convId: r.convId, userMsgId: r.userMsgId, text: chatText, reply: r.reply, model: r.model, source: 'telegram', settings: r.settings });

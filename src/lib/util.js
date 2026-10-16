@@ -43,6 +43,10 @@ export function bytesToB64(bytes) {
   return btoa(s);
 }
 
+// Telegram shows raw markdown: turn bold, headings and tables into plain text-message style.
+export function plainChat(text) {
+  return String(text || '').replace(/^[ \t]*\|?[ \t:|-]{3,}\|?[ \t]*$\n?/gm, '').replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (m, row) => row.split('|').map((c) => c.trim()).filter(Boolean).join(', ')).replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+}
 export const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
 // Tries to pull a JSON object out of a model reply, even if it is wrapped in text or code fences.
