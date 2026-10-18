@@ -5,7 +5,7 @@ import { complete } from './ai.js';
 
 const EMBED_MODEL = '@cf/baai/bge-m3';
 // Two memories live in one table: category 'self' is HER memory (who she is), every other category is THEIR memory (who the person is).
-const CATS = ['profile', 'preference', 'project', 'people', 'plan', 'other', 'self'];
+const CATS = ['profile', 'preference', 'project', 'people', 'plan', 'other', 'self', 'insight'];
 
 // Meaning search is optional: without a Vectorize index there is nothing to compare with, so we skip the (slow) embedding call completely.
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
@@ -83,44 +83,46 @@ export async function indexChat(env, messageId, role, text, convId) {
   if (vec) await vecUpsert(env, [{ id: 'c:' + messageId, values: vec[0], metadata: { t: 'chat', role, conv: convId, text: clip(text, 600), ts: now() } }]);
 }
 
+// How strongly a memory should come back: recent (half-life 2 weeks) + important + related to what was just said.
+export function scoreMemory(m, { words = [], vec = 0, t = Date.now() } = {}) {
+  const rec = Math.pow(0.5, Math.max(0, t - (m.updated_at || t)) / (14 * 86400000));
+  const txt = String(m.text || '').toLowerCase();
+  const hit = words.length ? words.filter((w) => txt.includes(w.slice(0, Math.max(4, w.length - 2)))).length / Math.min(words.length, 3) : 0;
+  const rel = Math.min(1, Math.max(vec, hit));
+  return { rel, score: 0.5 * rec + 2 * ((m.importance || 3) / 5) + 3 * rel + (m.category === 'insight' ? 0.3 : 0) };
+}
+
 // Both memories, separately. HER memory (who she is) is always loaded; THEIR memory is the pinned/important facts
 // plus the ones closest in meaning to the new message.
 export async function recall(env, query) {
   const [always, selfAlways, vec] = await Promise.all([
-    env.DB.prepare("SELECT text,category FROM memories WHERE category<>'self' AND (pinned=1 OR importance>=4) ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 16").all().then((r) => r.results || []).catch(() => []),
+    env.DB.prepare("SELECT text,category FROM memories WHERE category NOT IN ('self','insight') AND (pinned=1 OR importance>=4) ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 16").all().then((r) => r.results || []).catch(() => []),
     env.DB.prepare("SELECT text,category FROM memories WHERE category='self' ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 14").all().then((r) => r.results || []).catch(() => []),
     embed(env, query),
   ]);
-  let facts = [], chats = [], notes = [];
+  let chats = [], notes = [];
+  const vs = new Map();                                              // meaning-search score of each fact
   if (vec) {
     try {
       const q = await env.VECTORS.query(vec[0], { topK: 20, returnMetadata: 'all' });
-      const hits = [];
       for (const m of q.matches || []) {
         if (!m.metadata || m.score < 0.45) continue;
-        if (m.metadata.t === 'fact' && hits.length < 8) hits.push({ id: String(m.id).replace(/^f:/, ''), text: m.metadata.text });
+        if (m.metadata.t === 'fact') vs.set(String(m.id).replace(/^f:/, ''), m.score);
         else if (m.metadata.t === 'chat' && chats.length < 4) chats.push({ role: m.metadata.role, text: m.metadata.text, ts: m.metadata.ts });
         else if (m.metadata.t === 'note' && notes.length < 2) notes.push({ title: m.metadata.title, text: m.metadata.text });
       }
-      if (hits.length) {   // the table knows which memory each fact belongs to
-        const rows = await env.DB.prepare(`SELECT id,text,category FROM memories WHERE id IN (${hits.map(() => '?').join(',')})`).bind(...hits.map((h) => h.id)).all().then((r) => r.results || []).catch(() => []);
-        const byId = new Map(rows.map((r) => [r.id, r]));
-        facts = hits.map((h) => (byId.get(h.id) ? { text: byId.get(h.id).text, category: byId.get(h.id).category } : { text: h.text, category: '' }));
-      }
     } catch (e) { console.error('[vectorize query]', e && e.message); }
   }
-  if (!vec || (!facts.length && !chats.length && !notes.length)) {
-    // keyword fallback
-    const words = [...new Set(String(query).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || [])].slice(0, 6);
-    if (words.length) {
-      const where = words.map(() => 'LOWER(text) LIKE ?').join(' OR ');
-      const r = await env.DB.prepare(`SELECT text,category FROM memories WHERE ${where} ORDER BY updated_at DESC LIMIT 8`).bind(...words.map((w) => `%${w}%`)).all().catch(() => ({ results: [] }));
-      facts = r.results || [];
-    }
-  }
+  // Scored recall (the Generative Agents idea): recency + importance + relevance. Works with or without Vectorize.
+  const words = [...new Set(String(query).toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) || [])].slice(0, 8), t = now();
+  const rows = await env.DB.prepare('SELECT id,text,category,importance,updated_at FROM memories ORDER BY updated_at DESC LIMIT 200').all().then((r) => r.results || []).catch(() => []);
   const seen = new Set([...always, ...selfAlways].map((f) => f.text));
-  facts = facts.filter((f) => !seen.has(f.text));
-  return { always, selfAlways, facts: facts.filter((f) => f.category !== 'self'), selfFacts: facts.filter((f) => f.category === 'self'), chats, notes };
+  const scored = rows.filter((r) => !seen.has(r.text)).map((r) => ({ ...r, ...scoreMemory(r, { words, vec: vs.get(r.id) || 0, t }) }));
+  const byScore = (a, b) => b.score - a.score;
+  const facts = scored.filter((r) => r.category !== 'self' && r.category !== 'insight' && r.rel > 0).sort(byScore).slice(0, 8);
+  const selfFacts = scored.filter((r) => r.category === 'self' && r.rel > 0).sort(byScore).slice(0, 5);
+  const insights = scored.filter((r) => r.category === 'insight').sort(byScore).slice(0, 3);   // her own thoughts about him: always a few
+  return { always, selfAlways, facts, selfFacts, insights, chats, notes };
 }
 
 // Asks the model for lasting facts in a conversation text and sorts them into the two memories:

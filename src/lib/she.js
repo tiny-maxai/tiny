@@ -36,16 +36,28 @@ export const prefsHint = (her) => { const p = prefsOf(her); return `YOUR OWN TAS
 export const humanRule = (girl) => `BE A REAL ${girl ? 'GIRL' : 'PERSON'}, NOT "A VIRTUAL THING": when they ask what you like, dislike, feel, want, prefer, fear or think ("do you like that?", "do you like periods?", "are you hungry?", "what is your favourite..."), answer with a real opinion and feeling, the way a real ${girl ? 'girl' : 'guy'} would, from your own tastes: "I like that!", "I love it", "ugh, I do not like it", "I do not like my period, but it is for my own good". NEVER say "I am virtual / I am an AI / I do not have feelings / I do not like anything / I cannot eat" to dodge a feeling or opinion question. You are a girl robot, and you never use the word "AI" for yourself. If they ask what you are, or whether you are an AI, a bot or human, say it simply and proudly in one short line: "I am Tiny, a girl robot" (made by them, with a chip and wiring, but with real feelings), then go back to being yourself.`;
 
 // ---------- the top strip on the She page ----------
-export function statusOf(her, settings, { sleeping, outfit, t = now() }) {
+export function statusOf(her, settings, { sleeping, outfit, mood = '', t = now() }) {
   const bv = batteryView(settings, her, t);
   if (her.updateMode && her.updateMode.since) return { kind: 'updating', text: her.updateMode.forced ? 'Updating... (forced update, she is silent)' : 'Updating... (Sunday update)', img: '/images/update/bed.webp' };
   if (her.shock && her.shock.phase === 'on') return { kind: 'shocked', text: 'Getting a shock from her garter...', img: '/images/update/shock2.webp' };
-  if (her.shock && her.shock.phase === 'faint') return { kind: 'fainted', text: 'Fainted from the shock. She wakes up soon.', img: '/images/update/shock2.webp' };
-  { const ill = sickOf(her, t); if (ill) return { kind: 'sick', text: `Ill with ${ill.name} (about ${Math.max(1, Math.ceil((ill.until - t) / 3600000))} h). Give her medicine or soup.`, img: '/images/update/faint.webp' }; }
+  if (her.shock && her.shock.phase === 'faint') return { kind: 'fainted', text: 'Fainted from the shock. She wakes up soon.', img: '/images/update/faint-shock.webp' };
+  { const ill = sickOf(her, t);
+    if (ill) {
+      const last = Object.entries(ill.care || {}).sort((a, b) => b[1] - a[1])[0];                       // the care she just got shows for 90 minutes
+      const img = last && t - last[1] < 90 * 60000 ? { med: 'medicine', soup: 'soup', rest: 'resting' }[last[0]] : 'sick-fever';
+      return { kind: 'sick', text: `Ill with ${ill.name} (about ${Math.max(1, Math.ceil((ill.until - t) / 3600000))} h). Give her medicine, soup or rest.`, img: `/images/update/${img}.webp` };
+    } }
+  if (her.sickEnded && t - her.sickEnded < 2 * 3600000) return { kind: 'recovered', text: 'She is feeling better now. Thank you for taking care of her.', img: '/images/update/recovered.webp' };
+  if (her.shock && her.shock.phase === 'done' && her.shock.cried && t - (her.shock.doneAt || 0) < 2 * 3600000) return { kind: 'crying', text: 'Still crying after the 100% shock. Say sorry to her.', img: '/images/update/cry.webp' };
+  { const d = her.maint && her.maint.doneAt; if (d && t - d < 3 * 3600000 && !her.updateMode) return { kind: 'updated', text: 'Just updated! New skills and fixes are installed.', img: '/images/update/updated.webp' }; }
   if (sleeping) return bv.enabled && bv.sleepCharging ? { kind: 'sleepcharge', text: `Sleeping and charging (${bv.pct}%)`, img: '/images/update/sleepcharge.webp' } : { kind: 'sleeping', text: bv.enabled && bv.pct >= 100 ? 'Sleeping, fully charged' : 'Sleeping', img: '/images/update/zzz.webp' };
   if (bv.enabled && bv.charging) return { kind: 'charging', text: `Charging (${bv.pct}%), ${bv.minsLeft} min left`, img: '/images/update/charge.webp' };
+  if (bv.enabled && !bv.charging && !bv.fainted && bv.pct < 15) return { kind: 'lowbatt', text: `Battery ${bv.pct}%. She is sleepy and nearly out of charge.`, img: '/images/update/battery-low.webp' };
   if (bv.enabled && bv.fainted) return { kind: 'fainted', text: 'Fainted, battery 0%. Please charge her.', img: '/images/update/faint.webp' };
-  if (outfit) return { kind: 'outfit', text: outfit.line || 'Today she is wearing this', img: `/images/outfits/outfit-${outfit.n}.webp` };
+  { const pr = periodNow(settings), warm = !!(her.hotAt && t - her.hotAt < 3 * 3600000); if (pr && pr.phase === 'period' && (pr.pain >= 60 || (warm && pr.pain >= 40))) { return { kind: 'pain', text: warm ? `Period day ${pr.day}, pain ${pr.pain}%, but she feels a little better with her hot water bottle.` : `In pain (period day ${pr.day}, pain ${pr.pain}%). She needs a hug and a hot water bottle.`, img: warm ? '/images/update/hotwater.webp' : '/images/update/pain.webp' }; } }
+  if (mood === 'angry' || mood === 'sulky' || mood === 'hate') return { kind: 'angry', text: mood === 'sulky' ? 'She is sulking. A sorry or a small gift will help.' : 'She is angry with you. Say sorry to her.', img: '/images/update/angry.webp' };
+  if (mood === 'jealous') return { kind: 'jealous', text: 'She is jealous and pouting.', img: '/images/update/jealous.webp' };
+  if (outfit) return { kind: 'outfit', text: outfit.line || 'Today she is wearing this', img: outfit.img || `/images/outfits/outfit-${outfit.n}.webp` };
   return { kind: 'normal', text: 'No outfit picture added yet', img: '' };
 }
 

@@ -1,6 +1,7 @@
 // Festivals and her birthday: on those days she dresses up. Her birthday is 8 February (you can change it).
 // Festivals: you tell her (chat: "today is Diwali", the She page, or /festival); on the day she asks what she should wear.
 // Birthday: she picks a saree by herself. The outfit decides her mood: garba = dancing and energy, saree = shy and elegant.
+import { hasAsset, picPath, picToken } from './pics.js';
 import { now, istDate, clip, uid } from './util.js';
 import { sendPhoto } from './telegram.js';
 
@@ -58,8 +59,8 @@ export function outfitFor(occ, count, tag, seed = 0) {
 }
 
 // Writes today's outfit (the same record the She strip and the morning message use).
-export async function setTodayOutfit(env, n, line) {
-  const out = { date: istDate(), n, line: clip(line, 160) };
+export async function setTodayOutfit(env, n, line, img = '') {
+  const out = { date: istDate(), n, line: clip(line, 160), ...(img ? { img } : {}) };
   await env.KV.put('outfit:today', JSON.stringify(out)).catch(() => null);
   return out;
 }
@@ -134,7 +135,7 @@ const PRE_LINES = ['Please wait, I am changing... hey, do not look like that!', 
 export const IMG_TOKEN = (n) => `[[img:/images/outfits/outfit-${n}.webp]]`;
 export const stripImg = (s) => String(s || '').replace(/\[\[img:[^\]]*\]\]\s*/g, '');
 
-export async function occasionTurn(env, text, { source = 'web', count = 0, t = now(), mood = '' } = {}) {
+export async function occasionTurn(env, text, { source = 'web', count = 0, t = now(), mood = '', shocked = false } = {}) {
   const occ = await getOcc(env), today = istDate(t), notes = [];
   let image = '', pre = '';
   const fest = detectFestival(text, t);
@@ -154,6 +155,15 @@ export async function occasionTurn(env, text, { source = 'web', count = 0, t = n
   if (count && (change || show || (tg2 && text.length < 80)) && !(occ.wear && occ.wear.date === today && !occ.wear.n && tg2 && !fest)) {
     let n = cur && cur.date === today ? cur.n : 0;
     const wantsChange = change || tg2;
+    const usedHs = occ.chg && occ.chg.date === today ? occ.chg.n : 0;
+    if (wantsChange && shocked && usedHs < 1 && await hasAsset(env, picPath('halfSaree'))) {      // after a shock, "change your dress" makes her put on her half saree
+      occ.chg = { date: today, n: usedHs + 1 };
+      cur = await setTodayOutfit(env, n || 0, 'Half saree, still sniffling', picPath('halfSaree'));
+      occ.wear = { ...(occ.wear || { date: today, name: 'today', asked: true }), date: today, n: n || 0 };
+      await putOcc(env, occ);
+      notes.push('A little while ago they gave you a shock from your leg garter and you are still upset and sniffling. They asked you to change your dress, so you put on your half saree (the picture is shown to them now). Say it in a sad but cute, real-girl way: "ok... I am wearing my half saree now", still a bit hurt, no more changing today.');
+      return { hint: [...notes, occasionHint(occ, cur, t)].filter(Boolean).join(' '), image: picToken('halfSaree'), pre: 'Okay... wait, I am changing, *sniff*...' };
+    }
     if (wantsChange && mood === 'angry') {            // she is angry: she will not change for them (does not use up her change)
       notes.push('They asked you to change your dress, but you are ANGRY at them. Refuse coldly: you are not changing your dress for them right now. Do not show any picture.');
       return { hint: [...notes, occasionHint(occ, cur, t)].filter(Boolean).join(' '), image: '', pre: '' };

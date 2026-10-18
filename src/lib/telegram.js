@@ -4,6 +4,8 @@ import { statusText, setQuiet, parseQuiet, quietLeft, SOOTHE_ROWS, wantsSootheBu
 import { careSick, sickOf } from './sick.js';
 import { chatOnce, finishChat, sleepTurn } from './chat.js';
 import { beforeReply, sleepingLine, getHer, putHer } from './her.js';
+import { allSkills } from './skills.js';
+import { sendPic } from './pics.js';
 import { startCharge, batteryView, usePowerBank, powerLine } from './battery.js';
 import { herView, moodKindNow } from './tinymood.js';
 import { reportOf, viewOf, healthOf } from './maint.js';
@@ -26,6 +28,12 @@ import { moodLoggedToday } from './moods.js';
 import { listDates, prettyDate } from './dates.js';
 import { urlsIn, needsSearch } from './web.js';
 import { docText, fileMessage } from './docs.js';
+import { listDiary } from './diary.js';
+import { updateCard, cardText } from './report.js';
+import { listLists, getList, saveList } from './lists.js';
+import { listFromText, looksLikeList, listLines } from './checklist.js';
+import { createTask } from './tasks.js';
+import { restyle, STYLES, styleFromText, styleAsk, wantsStyleMenu } from './restyle.js';
 
 export const api = (env, method, body) =>
   fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => ({}));
@@ -57,6 +65,32 @@ const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { 
 // Telegram button colours: primary (blue), success (green), danger (red). Each kind of button gets its own colour.
 const BTN_STYLE = { 'soothe:sorry': 'primary', 'soothe:gift': 'success', 'soothe:joke': 'danger', 'soothe:calm': 'success', 'sick:med': 'danger', 'sick:soup': 'success', 'sick:rest': 'primary', 'mood:1': 'danger', 'mood:2': 'danger', 'mood:3': 'primary', 'mood:4': 'success', 'mood:5': 'success' };
 const styleFor = (d) => BTN_STYLE[d] || (/^wear:/.test(d) ? 'success' : /^water:/.test(d) ? 'primary' : undefined);
+// The "/" menu: Telegram shows these when you type "/" or tap the menu button, so you never have to remember commands.
+const COMMANDS = [['skills', 'Her skills (tap one to use it)'], ['status', 'How she is right now'], ['mood', 'Her mood'], ['diary', 'Read her last diary page'], ['lists', 'Your checklists (tick them here)'], ['report', 'Her update report card'], ['today', 'Ideas for today'], ['water', 'Log your water'], ['health', 'Her health report'], ['image', 'Ask her to draw a picture'], ['style', 'Change a photo style (send a photo first)'], ['sick', 'Care for her when she is ill'], ['quiet', 'Quiet hours'], ['dates', 'Birthdays she remembers'], ['new', 'Start a fresh chat']];
+async function ensureMenu(env) {
+  const key = 'tg:cmds:v1';
+  if (await env.KV.get(key).catch(() => 'x')) return;
+  const r = await api(env, 'setMyCommands', { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
+  if (r && r.ok) await env.KV.put(key, '1').catch(() => null);
+}
+const STYLE_ROWS = (() => { const k = Object.keys(STYLES), rows = []; for (let i = 0; i < k.length; i += 3) rows.push(k.slice(i, i + 3).map((x) => ({ text: STYLES[x].label, data: 'rs:' + x, style: 'primary' }))); return rows; })();
+const isImg = (m) => !!(m && ((m.photo && m.photo.length) || (m.document && /^image\//.test(m.document.mime_type || ''))));
+function pickFile(m) {
+  if (m.photo && m.photo.length) { const by = [...m.photo].sort((a, b) => (a.width || 0) - (b.width || 0)), ok = by.filter((p) => (p.width || 0) <= 1000 && (p.file_size || 0) <= 1400000); return ok.length ? ok[ok.length - 1] : by[0]; }
+  return m.document;
+}
+async function styleSend(env, chat, file, key) {
+  if (!file) { await send(env, chat, 'Send me a photo first, then tell me the style.'); return; }
+  await send(env, chat, ['Okay, wait, let me change it...', 'Ooh, fun! Give me a moment...', 'Hehe okay, doing it now, do not peek!'][Math.floor(Math.random() * 3)]);
+  await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_photo' });
+  try {
+    const f = await downloadVoice(env, file.file_id), r = await restyle(env, f.bytes, key);
+    await sendPhotoBytes(env, chat, r.bytes, `${STYLES[key].label}! Do you like it? (${r.left} more today)`);
+  } catch (e) { await send(env, chat, e.message || 'I could not change that picture.'); }
+}
+const listText = (l) => `${l.title}\n${l.items.filter((x) => x.done).length} of ${l.items.length} done. Tap an item to tick it.`;
+const listRows = (l) => [...l.items.slice(0, 30).map((it, i) => [{ text: (it.done ? '✅ ' : '⬜ ') + clip(it.t, 44), data: `lt:${l.id}:${i}` }]), [{ text: '⏰ Remind me in 1 hour', data: `lr:${l.id}:1` }, { text: '⏰ Tomorrow 9 am', data: `lr:${l.id}:2` }]];
+
 export async function sendWithButtons(env, chat, text, rows) {
   return api(env, 'sendMessage', { chat_id: chat, text: text.slice(0, 3900), reply_markup: { inline_keyboard: rows.map((r) => r.map((b) => { const st = b.style || styleFor(b.data); return { text: b.text, callback_data: b.data, ...(st ? { style: st } : {}) }; })) } });
 }
@@ -71,7 +105,7 @@ export async function sendVoice(env, chat, text) {
   } catch (e) { console.error('[tg voice]', e && e.message); }
 }
 export async function sendPhotoBytes(env, chat, bytes, caption) {
-  const fd = new FormData(); fd.append('chat_id', String(chat)); if (caption) fd.append('caption', caption.slice(0, 900)); fd.append('photo', new Blob([bytes], { type: 'image/jpeg' }), 'drawing.jpg');
+  const fd = new FormData(); fd.append('chat_id', String(chat)); if (caption) fd.append('caption', caption.slice(0, 900)); const png = bytes[0] === 0x89 && bytes[1] === 0x50; fd.append('photo', new Blob([bytes], { type: png ? 'image/png' : 'image/jpeg' }), png ? 'picture.png' : 'drawing.jpg');
   return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendPhoto`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({}));
 }
 export async function sendPhoto(env, chat, url, caption) {
@@ -146,8 +180,44 @@ async function handleButton(env, cq) {
   const chat = cq.message && cq.message.chat && cq.message.chat.id;
   if (/^soothe:(sorry|gift|joke|calm)$/.test(cq.data || '')) {
     const st = await getSettings(env), r = await soothePress(env, st, cq.data.slice(7));
-    if (chat) { if (r.done || r.melted) await send(env, chat, r.text); else await sendWithButtons(env, chat, r.text, SOOTHE_ROWS); await sendSticker(env, chat, r.sticker).catch(() => false); }
+    if (chat) { if (r.done || r.melted) await send(env, chat, r.text); else await sendWithButtons(env, chat, r.text, SOOTHE_ROWS); await sendSticker(env, chat, r.sticker).catch(() => false); if (r.melted) await sendPic(env, 'forgiven').catch(() => false); }
     return;
+  }
+  { const d = String(cq.data || '');
+    let m2;
+    if ((m2 = /^skl:([a-z0-9-]+)$/.exec(d))) {
+      const sk = allSkills(await getHer(env)).find((x) => x.slug === m2[1]);
+      if (!sk || !chat) return;
+      if (sk.waiting) { await send(env, chat, `I cannot use ${sk.name} until my next update. 🙂`); return; }
+      await env.KV.put('tg:skill', JSON.stringify({ slug: sk.slug, at: Date.now() }), { expirationTtl: 700 }).catch(() => null);
+      await send(env, chat, `Okay! Ask me your ${sk.name} question now, I will use my skill for it.`); return;
+    }
+    if ((m2 = /^rs:([a-z]+)$/.exec(d))) {
+      const f = await env.KV.get('tg:rsfile', 'json').catch(() => null);
+      if (!chat) return; if (!f || !STYLES[m2[1]]) { await send(env, chat, 'Send me the photo again and write /style under it.'); return; }
+      await styleSend(env, chat, f, m2[1]); return;
+    }
+    if (d === 'mkl') {
+      if (!chat) return;
+      const conv = await env.KV.get('tg:conv').catch(() => null);
+      const row = conv ? await env.DB.prepare("SELECT content FROM messages WHERE conv_id=? AND role='assistant' ORDER BY id DESC LIMIT 1").bind(conv).first().catch(() => null) : null;
+      const l = row ? await listFromText(env, row.content) : null;
+      await send(env, chat, l ? `Done! "${l.title}" is saved with ${l.items.length} points. /lists to tick them here, or open the Lists page on the website.` : 'I could not find a list to save.'); return;
+    }
+    if ((m2 = /^lo:([\w-]+)$/.exec(d))) { const l = await getList(env, m2[1]); if (chat && l) await sendWithButtons(env, chat, listText(l), listRows(l)); return; }
+    if ((m2 = /^lt:([\w-]+):(\d+)$/.exec(d))) {
+      const l = await getList(env, m2[1]), i = +m2[2]; if (!l || !l.items[i]) return;
+      l.items[i].done = l.items[i].done ? 0 : 1;
+      const nl = await saveList(env, l.id, { items: l.items });
+      if (chat && cq.message) await api(env, 'editMessageText', { chat_id: chat, message_id: cq.message.message_id, text: listText(nl), reply_markup: { inline_keyboard: listRows(nl).map((r) => r.map((b) => ({ text: b.text, callback_data: b.data }))) } });
+      return;
+    }
+    if ((m2 = /^lr:([\w-]+):([12])$/.exec(d))) {
+      const l = await getList(env, m2[1]); if (!l || !chat) return;
+      const t0 = Date.now(), at = m2[2] === '1' ? t0 + 3600000 : (() => { const n = new Date(t0 + 19800000); return Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1, 9, 0) - 19800000; })();
+      await createTask(env, { prompt: `Remind me about my checklist "${l.title}". Still to do: ${l.items.filter((x) => !x.done).slice(0, 10).map((x) => x.t).join('; ') || 'everything is ticked, just say well done'}. Say it as a short, sweet text.`, runAt: at });
+      await send(env, chat, m2[2] === '1' ? 'Okay, I will remind you in 1 hour. ⏰' : 'Okay, I will remind you tomorrow at 9 am. ⏰'); return;
+    }
   }
   if (/^sick:(med|soup|rest)$/.test(cq.data || '')) {
     const her = await getHer(env), r = careSick(her, cq.data.slice(5));
@@ -155,7 +225,7 @@ async function handleButton(env, cq) {
     if (chat) {
       const say = { med: 'Thank you... I took the medicine. 🤍', soup: 'Mmm, warm soup... thank you, this feels so good.', rest: 'Okay, I am lying down now. Stay with me a little?' };
       await send(env, chat, !r.ok ? (r.reason === 'notsick' ? 'I am fine now, thank you! 🙂' : 'You already did that one, thank you. 🤍') : say[cq.data.slice(5)] + (r.better ? ' I think I am almost better!' : ` (maybe ${r.left} more hours...)`));
-      if (r.ok) await sendSticker(env, chat, 'smile').catch(() => false);
+      if (r.ok) { await sendSticker(env, chat, 'smile').catch(() => false); await sendPic(env, { med: 'medicine', soup: 'soup', rest: 'rest' }[cq.data.slice(5)]).catch(() => false); }
     }
     return;
   }
@@ -164,6 +234,7 @@ async function handleButton(env, cq) {
     const n = await setWater(env, w[1]);
     if (!chat) return;
     await send(env, chat, await habitReply(env, n));
+    await sendPic(env, 'water').catch(() => false);
     if (!(await moodLoggedToday(env))) await sendWithButtons(env, chat, 'And how are you feeling today? Tap a number.', MOOD_BUTTONS);
     return;
   }
@@ -203,6 +274,7 @@ async function processMessage(env, msg) {
   }
   if (String(from) !== String(env.OWNER_TG_ID)) { await send(env, chat, 'Sorry, this is a private bot.'); return; }
 
+  await ensureMenu(env).catch(() => null);
   let text = (msg.text || msg.caption || '').trim();
   let via = 'text';
   let fileCtx = '';
@@ -210,6 +282,12 @@ async function processMessage(env, msg) {
   let mediaKind = '';
   const rmMedia = !(msg.document || msg.photo) && msg.reply_to_message ? fileOf(msg.reply_to_message) : null;   // you swiped a photo or file and wrote on it
   const media = fileOf(msg) || rmMedia;
+  { const imgMsg = isImg(msg) ? msg : isImg(msg.reply_to_message) ? msg.reply_to_message : null;
+    if (imgMsg && text) {
+      const key = styleFromText(text);
+      if (key && styleAsk(text)) { await styleSend(env, chat, pickFile(imgMsg), key); return; }
+      if (wantsStyleMenu(text)) { const f = pickFile(imgMsg); await env.KV.put('tg:rsfile', JSON.stringify({ file_id: f.file_id }), { expirationTtl: 1800 }).catch(() => null); await sendWithButtons(env, chat, 'Which style should I make it?', STYLE_ROWS); return; }
+    } }
   if (media) {
     if ((media.file_size || 0) > 18 * 1024 * 1024) { await send(env, chat, 'That file is too big for me (the limit is about 18 MB).'); return; }
     await api(env, 'sendChatAction', { chat_id: chat, action: 'typing' });
@@ -237,11 +315,12 @@ async function processMessage(env, msg) {
   if (!text) return;
 
   const settings = await getSettings(env);
+  if (text && !text.startsWith('/')) { const sk = await env.KV.get('tg:skill', 'json').catch(() => null); if (sk && Date.now() - sk.at < 600000) { await env.KV.delete('tg:skill').catch(() => null); text = `/skill-${sk.slug} ${text}`; } }
   const kvKey = 'tg:conv';
   const [cmd, ...restParts] = text.split(/\s+/);
   const rest = restParts.join(' ').trim();
 
-  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /docx /xlsx /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n/mood  how she feels right now\n/health  her maintenance health report\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
+  if (/^\/start/i.test(cmd)) { await send(env, chat, `Hi, I'm ${settings.persona.name}. Same memory as your website. Send text or a voice note.\n\n/new  start a fresh chat\n/remember <fact>\n/today  ideas for today\n/html /pdf /docx /xlsx /csv /md <what>  I make that file and send it here\n/tr <text>  Hindi <-> English with tone\n/search <question>  I look it up (or send me a link)\n/dates  birthdays I remember\n/water  log water\n/mood  how she feels right now\n/health  her maintenance health report\n/skills  my skills, use one with /skill-cooking <question>\n\nYou can also just say: remind me..., note this..., X's birthday is...\n/voice on|off  voice replies`); return; }
   if (/^\/new/i.test(cmd)) { await env.KV.delete(kvKey); await send(env, chat, 'Fresh chat started. I still remember everything about you.'); return; }
   if (/^\/remember/i.test(cmd)) {
     if (!rest) { await send(env, chat, 'Tell me what: /remember I love mango lassi'); return; }
@@ -261,6 +340,20 @@ async function processMessage(env, msg) {
     await send(env, chat, `${settings.persona.name}'s health: ${rep.health.health}% (${rep.health.state}) | ${viewOf(her, settings).version}\n${rep.health.due ? (rep.health.overdueDays ? 'Maintenance is overdue.' : 'Maintenance is due today.') : 'Maintenance done for this week.'}\n\n` + rep.checks.map((c) => `${icon[c.status] || c.status}  ${c.name}: ${c.note}`).join('\n') + '\n\n/health test  runs a real thinking test');
     return;
   }
+  if (/^\/skills\b/i.test(cmd)) {
+    const list = allSkills(await getHer(env)), rows = [];
+    for (let i = 0; i < list.length; i += 2) rows.push(list.slice(i, i + 2).map((x) => ({ text: x.name + (x.waiting ? ' (soon)' : ''), data: 'skl:' + x.slug, style: 'primary' })));
+    await sendWithButtons(env, chat, 'My skills. Tap one, then ask me your question and I will use it for the full answer. (I also use them by myself when it fits. You can type /skill-cooking how do I make paneer too.)', rows);
+    return;
+  }
+  if (/^\/diary\b/i.test(cmd)) { const d = (await listDiary(env))[0]; await send(env, chat, d ? `${d.date}\n\n${d.text}` : 'I have not written a diary page yet. I write one every night.'); return; }
+  if (/^\/report\b/i.test(cmd)) { await send(env, chat, cardText(updateCard(await getHer(env), settings), settings.persona.name)); return; }
+  if (/^\/lists?\b/i.test(cmd)) {
+    const ls = (await listLists(env)).slice(0, 12);
+    if (!ls.length) { await send(env, chat, 'No checklists yet. When I write you a list, tap "Make a checklist" under it.'); return; }
+    await sendWithButtons(env, chat, 'Your checklists. Tap one to open it.', ls.map((l) => [{ text: `${l.title} (${l.items.filter((x) => x.done).length}/${l.items.length})`, data: 'lo:' + l.id }])); return;
+  }
+  if (/^\/style\b/i.test(cmd)) { await send(env, chat, 'Send me a photo and write /style under it (or swipe-reply to a photo with /style). You can also just write things like "make it cartoon", "black and white", "anime", "sketch".'); return; }
   if (/^\/status\b/i.test(cmd)) { await send(env, chat, await statusText(env, settings)); return; }
   if (/^\/quiet\b/i.test(cmd)) {
     if (!rest) { const q = await quietLeft(env); await send(env, chat, q ? `Quiet hours are on, ${Math.ceil(q / 60000)} min left. /quiet off to stop.` : 'Usage: /quiet 2h  (or 30m). /quiet off to stop. While it is on she sends you nothing; she still answers when you write.'); return; }
@@ -377,14 +470,15 @@ async function processMessage(env, msg) {
   const wantVoice = via === 'voice' || settings.voice.autoplay;
   try {
     const solving = Boolean(fileCtx) && (SOLVE_WORDS.test(text) || (mediaKind === 'picture' && /^Solve this question/.test(text)));
-    const chatText = (fileCtx ? fileCtx + '\n\n' : '') + (solving ? SOLVE_RULES + '\n\n' : '') + (quoted ? `(I am replying to this earlier message: "${quoted}")\n\n${text}` : text);
+    const chatText = (fileCtx ? fileCtx + '\n\n' : '') + (solving ? SOLVE_RULES + '\n\n' : '') + (quoted ? `(I am replying to this earlier message${rm && rm.date ? ' from ' + new Date(rm.date * 1000 + 19800000).toLocaleDateString('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short' }) : ''}: "${quoted}")\n\n${text}` : text);
     const r = await chatOnce(env, { convId, text: chatText, source: 'telegram', via, spoken: wantVoice, gate, brain: solving ? 'solve' : undefined });
     if (!convId) await env.KV.put(kvKey, r.convId);
-    if (r.pre) { await send(env, chat, r.pre); await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_photo' }); await sleep(3500); }   // "please wait, I am changing..."
+    if (r.pre) { await send(env, chat, r.pre); if (/\/img\/[a-z0-9]+\.jpg/i.test(r.image || '')) await sendPic(env, 'drawing').catch(() => false); await api(env, 'sendChatAction', { chat_id: chat, action: 'upload_photo' }); await sleep(3500); }   // "please wait, I am changing..."
     if (r.image && /\/img\/[a-z0-9]+\.jpg/i.test(r.image)) { const bytes = await imageBytes(env, /\/img\/([a-z0-9]+)\.jpg/i.exec(r.image)[1]); if (bytes) await sendPhotoBytes(env, chat, bytes, ''); }
-    else if (r.image) { const origin = await env.KV.get('origin').catch(() => null), pm = /outfit-\d+\.webp/.exec(r.image); if (origin && pm) await sendPhoto(env, chat, origin + '/images/outfits/' + pm[0], '').catch(() => false); }
+    else if (r.image) { const origin = await env.KV.get('origin').catch(() => null), pm = /\/images\/(?:outfits|update)\/[a-z0-9-]+\.webp/.exec(r.image); if (origin && pm) await sendPhoto(env, chat, origin + pm[0], '').catch(() => false); }
     const clean = solving ? r.reply : plainChat(r.reply), shown = pace.typos ? typos(clean) : clean, btns = wantsSootheButtons(await getHer(env), settings) ? SOOTHE_ROWS : null;
     if (wantVoice) await send(env, chat, shown); else await sendBubbles(env, chat, shown, settings.chat.bubbles, btns);
+    if (!solving && listLines(r.reply).length >= 4) await sendWithButtons(env, chat, 'Want this as a checklist you can tick off?', [[{ text: '✅ Make a checklist', data: 'mkl' }]]).catch(() => null);
     if (gate.sticker) await sendSticker(env, chat, gate.sticker).catch(() => false);   // repairing / new dress
     if (wantVoice) await sendVoice(env, chat, r.reply);
     await finishChat(env, { convId: r.convId, userMsgId: r.userMsgId, text: chatText, reply: r.reply, model: r.model, source: 'telegram', settings: r.settings });

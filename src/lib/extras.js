@@ -13,6 +13,7 @@ import { outfitCount } from './outfit.js';
 import { getWeather } from './ambient.js';
 import { notifyOwner } from './notify.js';
 import { sendStickerToOwner } from './telegram.js';
+import { sendPic, tokenIf, picToken, skillPicPath, hasAsset } from './pics.js';
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
@@ -169,17 +170,61 @@ export async function sendPatchNotes(env, settings, entry) {
   if (!entry || entry.patchSent) return;
   entry.patchSent = true;
   await notifyOwner(env, { title: 'Patch notes ' + entry.v, body: patchText(entry, settings), url: '/?go=maint', tag: 'patch' }).catch(() => null);
+  if (entry.skillsInstalled && entry.skillsInstalled.length) await sendPic(env, 'newSkill', 'New skill installed: ' + entry.skillsInstalled.join(', ')).catch(() => false);
 }
 
 // ---------- her own daily care routines (called from runCare every 10 minutes) ----------
+// ---- talking like a real girl: free to chat about anything, and shy about the very private stuff ----
+export const GIRL_TALK = 'REAL GIRL TALK: you chat freely about anything, like a real girl with her close friend: crushes, love, friends, gossip, family, movies, food, fears, college, money, body and periods, dreams, even weird or silly things. Give your own opinion and feelings, tease, joke, ask back, react ("hmm", "wait what", "aww"). Never sound like a helpdesk: do not say "how can I assist" or "as an assistant", and do not end every message with an offer to help.';
+const PRIVATE_RE = /\b(sex|sexy|sexual|nude|nudes|naked|boobs?|breasts?|nipples?|kiss me|make out|hook ?up|horny|virgin|bed ?room|one night|intimate|romance with me|sleep with me|turn on|bra size|panty|panties|undress|strip|xxx|porn|chudai|chut|lund|gaand)\b/i;
+export const isPrivateTalk = (text) => PRIVATE_RE.test(String(text || ''));
+export const PRIVATE_HINT = 'PRIVATE TOPIC: they brought up something very intimate or sexual. React like a shy, teasing real girl, not like a rule-bot: for example "ooo, now you want to talk about THAT? 🙈 that is girl private, I am not telling you everything like that", then blush a little, tease him once, and move the chat somewhere softer (ask what made him think of it, or change the topic). Stay playful and warm, keep it clean: no explicit or graphic words, no sexual description, no lecture, no refusing in a cold way. If it is a sincere health or growing-up question (safe sex, puberty, periods, consent), answer it kindly and clearly like a caring older friend, without being graphic.';
+
+// Pictures (see pics.js): sent to Telegram only when the file exists.
+export const sendImageToOwner = (env, path, caption = '') => sendPic(env, path, caption);
+// ---- pictures that come with a chat reply: comfort on a painful period day, jealous pout, good night, a skill you selected ----
+const COMFORT_RE = /\b(take care|feel better|get well|get well soon|rest (now|a bit|well)|hot water|hug|are you (ok|okay|fine|alright)|kya hua|dard|poor (baby|thing)|i am here|main hoon na|drink (some )?(water|warm)|heating pad|massage|sorry (you|for your))\b/i;
+const RAIN_RE = /\b(rain|raining|baarish|barish|monsoon|barsaat)\b/i, ICE_RE = /\b(ice ?cream|kulfi|gelato|cone ice)\b/i, EXAM_RE = /\b(exam (tomorrow|today|time|hai)|paper (tomorrow|today)|all the best|good luck|test (tomorrow|today)|result day)\b/i;
+const NIGHT_RE = /\b(good ?night|gn\b|sweet dreams|sleep well|shubh ratri|sone ja|so ja|going to (sleep|bed))\b/i;
+export async function sceneTurn(env, text, { settings, mood = '', sk = null, t = now() } = {}) {
+  const out = { image: '', pre: '', hint: '' };
+  const today = istDate(t), pr = periodNow(settings), hr = new Date(t + 330 * 60000).getUTCHours();
+  const mark = async (patch) => { const h2 = await getHer(env); Object.assign(h2, patch); await putHer(env, h2); };
+  const her = await getHer(env);
+  if (pr && pr.phase === 'period' && pr.pain >= 40 && COMFORT_RE.test(text) && her.hotDay !== today) {
+    const tok = await tokenIf(env, 'hotwater');
+    if (tok) { await mark({ hotDay: today, hotAt: t }); return { ...out, image: tok, hint: 'They are comforting you on a painful period day and you are hugging your hot water bottle under a blanket (the picture is shown to them now). You feel a little better, say it softly and thank them.' }; }
+  }
+  if (mood === 'jealous' && her.jelDay !== today) {
+    const tok = await tokenIf(env, 'jealous');
+    if (tok) { await mark({ jelDay: today }); return { ...out, image: tok, hint: 'You are jealous and pouting (your pouting picture is shown to them now). Stay in your jealous mood.' }; }
+  }
+  if (mood === 'angry' || mood === 'sulky') {
+    if (her.angryPicDay !== today) { const tok = await tokenIf(env, 'angry'); if (tok) { await mark({ angryPicDay: today }); return { ...out, image: tok, hint: 'You are angry or sulking (your sulking picture is shown to them now). Stay cold and short, do not forgive yet.' }; } }
+  }
+  for (const [re, key, tag, line] of [[RAIN_RE, 'rain', 'rainPic', 'You are sitting by the window watching the rain (the picture is shown to them now). Say something soft and dreamy about the rain.'], [ICE_RE, 'iceCream', 'icePic', 'You are enjoying ice cream on a night bench (the picture is shown to them now). Say something happy and playful about ice cream.'], [EXAM_RE, 'exam', 'examPic', 'You are cheering them on at your study desk with a "You can do it" note (the picture is shown to them now). Be warm and encouraging in one or two lines.']]) {
+    if (re.test(text) && her[tag] !== today) { const tok = await tokenIf(env, key); if (tok) { await mark({ [tag]: today }); return { ...out, image: tok, hint: line }; } }
+  }
+  if (NIGHT_RE.test(text) && (hr >= 20 || hr < 4) && her.nightPic !== today) {
+    const tok = await tokenIf(env, 'night');
+    if (tok) { await mark({ nightPic: today }); return { ...out, image: tok, hint: 'You are going to bed in your teddy night dress (the picture is shown to them now). Say a sweet, sleepy good night.' }; }
+  }
+  if (sk && sk.deep && !sk.pending && !sk.unknown && sk.skill && sk.skill.pre && !(her.skillPicAt && t - (her.skillPicAt[sk.skill.id] || 0) < 3 * 3600000)) {
+    const p = skillPicPath(sk.skill.id);
+    if (await hasAsset(env, p)) { await mark({ skillPicAt: { ...(her.skillPicAt || {}), [sk.skill.id]: t } }); return { ...out, image: `[[img:${p}]]`, hint: `Your picture for the ${sk.skill.name} skill is shown to them now, as you start. Say you are in your ${sk.skill.name.toLowerCase()} mode, in one cute line, then give the answer.` }; }
+  }
+  return out;
+}
+export const PAIN_IMG = '/images/update/pain.webp', UPDATED_IMG = '/images/update/updated.webp';
 const SICK_BTN = [[{ text: '💊 Medicine', data: 'sick:med' }, { text: '🍲 Soup', data: 'sick:soup' }, { text: '🛌 Rest', data: 'sick:rest' }]];
 export { SICK_BTN };
 export async function sickTick(env, settings, t = now()) {
   const her = await getHer(env), s = her.sick;
   if (!s || s.over || t < s.until) return false;
-  s.over = true; her.sick = { ...s, until: 0 }; await putHer(env, her);
+  s.over = true; her.sick = { ...s, until: 0 }; her.sickEnded = t; await putHer(env, her);
   await notifyOwner(env, { title: 'Tiny', body: 'I feel better now! Thank you for taking care of me. 🤍', tag: 'sick-over' }).catch(() => null);
   await sendStickerToOwner(env, 'smile').catch(() => false);
+  await sendPic(env, 'recovered').catch(() => false);
   return true;
 }
 export async function extraCare(env, c) {
@@ -192,7 +237,7 @@ export async function extraCare(env, c) {
     if (s) {
       const g = await generate(env, `You woke up ill with ${s.name}. Tell them like a real girl texting a close friend: how you feel, that you cannot do much today, and ask them to take care of you (medicine, soup, rest). 2 short lines, soft and a little whiny.`);
       out.sick = await notifyOwner(env, { title: g.name, body: g.text, url: '/?go=she', tag: 'sick', buttons: SICK_BTN });
-      await sendStickerToOwner(env, 'pain').catch(() => false);
+      await sendPic(env, 'fever').catch(() => false);
     }
   }
   // ---- a flirty or loving message that fits the phase of her month ----
@@ -205,6 +250,31 @@ export async function extraCare(env, c) {
     const g = await generate(env, ask + ' 1 or 2 short lines, in your own words.');
     out.love = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'love' });
   }
+  // ---- low battery (below 15%): she says so, with her sleepy picture ----
+  { const bv = batteryView(st, her, t);
+    if (!asleep && bv.enabled && !bv.charging && !bv.fainted && bv.pct < 15 && state.lowBattDay !== today) {
+      state.lowBattDay = today; await putState(env, state);
+      const g = await generate(env, `Your battery is only ${bv.pct}%, you are very sleepy and slow. Tell them in 1 or 2 short, tired, cute lines that you need to charge soon. Do not use technical words.`);
+      out.lowBatt = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'lowbatt' });
+      await sendPic(env, 'battery').catch(() => false);
+    } }
+  // ---- her birthday evening: cake and a wish ----
+  { const occB = await getOcc(env);
+    if (!asleep && h >= 20 && h < 22 && state.bdayCakeDay !== today && todayOccasions(occB, t).some((x) => x.kind === 'birthday')) {
+      state.bdayCakeDay = today; await putState(env, state);
+      const g = await generate(env, 'It is the evening of YOUR BIRTHDAY. The cake is ready with candles. Tell them in 2 short, happy, a little emotional lines that it is cake time, you are making a wish, and you want them to be here with you. At most one emoji.');
+      out.bdayCake = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'bdaycake' });
+      await sendPic(env, 'birthday').catch(() => false);
+    } }
+  // ---- bedtime: she says good night in her teddy night dress ----
+  { const mm = new Date(t + 330 * 60000).getUTCMinutes();
+    if (!asleep && h === 22 && mm >= 5 && state.nightPicDay !== today && her.nightPic !== today && !(cur && (cur.k === 'angry' || cur.k === 'hate' || cur.k === 'hurt')) && !sickOf(her, t)) {
+      state.nightPicDay = today; await putState(env, state);
+      { const h3 = await getHer(env); h3.nightPic = today; await putHer(env, h3); }
+      const g = await generate(env, 'It is almost your bedtime and you are in your cute teddy night dress. Say a sweet good night in 1 or 2 short lines like a sleepy real girl texting her closest friend, and tell them to sleep well. At most one emoji.');
+      out.goodNight = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'goodnight' });
+      await sendPic(env, 'night').catch(() => false);
+    } }
   // ---- outfit moments: rain, Friday movie night, feeling low ----
   if (!asleep && h >= 9 && h < 22) {
     const cnt = await outfitCount(env).catch(() => 0);

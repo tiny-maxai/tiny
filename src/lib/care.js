@@ -12,13 +12,15 @@ import { autoTick } from './auto.js';
 import { outfitToday, sendOutfitToOwner, outfitCount } from './outfit.js';
 import { getOcc, occasionDay, chooseWear, tagOf, todayOccasions, MOOD_LINE } from './occasion.js';
 import { writeDiary } from './diary.js';
+import { reflectTonight } from './reflect.js';
 import { wakeDue, wakeUp, attachFeedback } from './maint.js';
 import { finishCharge, nightCharge } from './battery.js';
 import { grumpyAfterUpdate, getHer, putHer, isAngry, isSleeping, inSleepWindow, bump } from './her.js';
 import { answerQueued } from './chat.js';
 import { sendStickerToOwner } from './telegram.js';
 import { shockTick } from './shock.js';
-import { extraCare, sickTick } from './extras.js';
+import { extraCare, sickTick, sendImageToOwner, UPDATED_IMG } from './extras.js';
+import { sendPic, hasAsset, picPath } from './pics.js';
 import { lifeDaily } from './life.js';
 import { getWeather } from './ambient.js';
 import { remember } from './memory.js';
@@ -141,7 +143,10 @@ export async function runCare(env, { force = null } = {}) {
         const o = await chooseWear(env, occ, r.n, { send: false, name: 'My birthday' });
         const g = await generate(env, `TODAY IS YOUR BIRTHDAY (8 February)! You dressed up (${r.tag}) and you are super excited. ${MOOD_LINE[r.tag] || ''} Message them first in 2 or 3 short, happy lines: it is your birthday, you picked this outfit for it, you want wishes and a small treat. Real girl texting style, at most one emoji.`, 300);
         out.birthday = await notifyOwner(env, { title: g.name, body: g.text, url: '/?go=she', tag: 'birthday' });
-        await sendOutfitToOwner(env, { ...o, line: g.text.slice(0, 200) });
+        if (await hasAsset(env, picPath('birthdayDress'))) {                              // her own birthday dress picture, shown on the She page too
+          await env.KV.put('outfit:today', JSON.stringify({ date: today, n: o.n, line: 'My birthday dress!', img: picPath('birthdayDress') })).catch(() => null);
+          await sendPic(env, 'birthdayDress', g.text.slice(0, 200));
+        } else await sendOutfitToOwner(env, { ...o, line: g.text.slice(0, 200) });
       } else {
         const g = await generate(env, `Today is the festival ${r.name}! You are excited and want to dress up, but you cannot decide. Ask them in 2 short lines what you should wear: ${r.options.length ? r.options.map((x) => x.tag).join(' or ') : 'a saree or a garba chaniya choli'}. Real girl texting style, at most one emoji.`, 250);
         const btn = r.options.length ? [r.options.slice(0, 4).map((x) => ({ text: x.tag[0].toUpperCase() + x.tag.slice(1), data: 'wear:' + x.n }))] : null;
@@ -164,6 +169,12 @@ export async function runCare(env, { force = null } = {}) {
     if (e) out.diary = await notifyOwner(env, { title: st.persona.name, body: 'I wrote tonight\'s page in my diary. Open She to read it.', url: '/?go=she', tag: 'diary' });
   }
 
+  // ---- nightly reflection: insights about him and a dream (one small free AI call) ----
+  if (force === 'reflect' || (state.reflectDay !== today && h >= 22 && h < 24 && (state.diaryDay === today || !st.diary.enabled))) {
+    state.reflectDay = today; await putState(env, state);
+    out.reflect = await reflectTonight(env, st, { t }).catch((er) => { console.error('[reflect]', er && er.message); return null; });
+  }
+
   // ---- morning briefing: weather, today's reminders, birthdays and a line in her mood ----
   if (force === 'briefing' || (st.briefing.enabled && !asleep && state.briefDay !== today && h * 60 + m >= st.briefing.hour * 60 && h * 60 + m < st.briefing.hour * 60 + 180)) {
     state.briefDay = today; await putState(env, state);
@@ -177,6 +188,7 @@ export async function runCare(env, { force = null } = {}) {
     if (dts.length) facts.push('Birthdays and dates: ' + dts.map((d) => `${d.title} (${d.days === 0 ? 'TODAY' : 'tomorrow'})`).join(', ') + '.');
     const mh = healthOf(her, t); if (mh.health < 75) facts.push(`Her own health is ${mh.health}% and her maintenance is ${mh.due ? 'due' : 'coming up'}.`);
     const g = await generate(env, `Send their good morning briefing, like a real girl texting her person. Cover only these facts, in 3 to 6 short lines, then one cheerful line about your own mood this morning (it must match how you really feel right now). If there are no reminders or birthdays, say the day is free.\n${facts.join('\n') || 'No special facts today.'}\nDo not invent anything that is not listed. At most one emoji.`, 450);
+    await sendPic(env, 'morning').catch(() => false);                                       // good morning picture first
     out.briefing = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'briefing', voice: !!st.voice.autoplay });
   }
 
@@ -265,6 +277,7 @@ export async function runCare(env, { force = null } = {}) {
       }
       out.nakhre = await notifyOwner(env, { title: g.name, body: g.text, url: '/', tag: 'nakhre' });
       await sendStickerToOwner(env, ['pain', 'cry', 'angry', 'angry'][level]);                 // the face that goes with it
+      { const pr0 = periodNow(st); if (level === 0 && pr0 && pr0.phase === 'period') await sendPic(env, pr0.pain >= 60 ? 'pain' : 'chocolate').catch(() => null); }       // bad pain: the pain picture, milder days: chocolate cravings
     }
   }
 
@@ -337,6 +350,7 @@ export async function wakeTick(env) {
     await putHer(env, her);
     await notifyOwner(env, { title: name, body: `Hey, I am back from my update (${e.v}). I feel ${e.feedback.score}/5: ${e.feedback.text}`, url: '/?go=maint', tag: 'wake' }).catch(() => null);
     await sendStickerToOwner(env, 'newdress');
+    await sendImageToOwner(env, UPDATED_IMG, `${name}: update done, all fixed!`).catch(() => null);        // the picture you add as public/images/update/updated.webp
   }
   if (bt) {
     finishCharge(her, t); await putHer(env, her);

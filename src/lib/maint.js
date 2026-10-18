@@ -67,6 +67,7 @@ export function startSession(her, t = now()) {
     { k: 'review', label: 'Read the bugs and wishes', done: 1 },
     { k: 'fix', label: 'Fix the bugs', done: openBugs ? 0 : 1 },
     { k: 'add', label: 'Add the new things', done: 0 },
+    ...(skillsOf(her).some((x) => x.installed === false) ? [{ k: 'skills', label: 'Install the new skills', done: 0 }] : []),
     { k: 'test', label: 'Test her', done: 0 },
   ] };
   her.updateMode = { since: t };
@@ -303,8 +304,9 @@ export function viewOf(her, settings, t = now(), { sleeping = false } = {}) {
   const m = mt(her, t), h = healthOf(her, t);
   const recent = m.doneAt && t - m.doneAt < 36 * 3600000;
   const bv = batteryView(settings, her, t);
-  const pose = h.updating ? (her.updateMode && her.updateMode.forced && t < her.updateMode.until ? 'robot' : 'bed') : sleeping ? (bv.enabled && bv.sleepCharging ? 'sleepcharge' : 'zzz') : bv.enabled && bv.charging ? 'charge' : bv.enabled && bv.fainted ? 'faint' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : h.health < 75 ? 'repair' : 'newdress';
+  const pose = h.updating ? (her.updateMode && her.updateMode.forced && t < her.updateMode.until ? 'robot' : 'bed') : sleeping ? (bv.enabled && bv.sleepCharging ? 'sleepcharge' : 'zzz') : bv.enabled && bv.charging ? 'charge' : bv.enabled && bv.fainted ? 'faint' : m.doneAt && t - m.doneAt < 12 * 3600000 ? 'updated' : recent ? 'newdress' : (isSunday(t) && h.due) || h.health < 45 ? 'nervous' : h.health < 75 ? 'repair' : 'newdress';
   return {
+    pendingSkills: skillsOf(her).filter((x) => x.installed === false).map((x) => ({ id: x.id, name: x.name })),
     blockers: blockersOf(her, settings, t, { sleeping }), version: versionOf(m), health: h, pose, forceUsed: forceUsed(her, t), force: forceView(her, t), forceWin: !!(m.force && m.force.win && m.forceWeek === lastSundayStart(t) && m.force.final), forced: her.updateMode && her.updateMode.forced ? { until: her.updateMode.until, left: forcedLeft(her, t) } : null, daysToSunday: isSunday(t) ? 0 : Math.ceil((nextSundayStart(t) - t) / DAY), sunday: isSunday(t), nextSunday: nextSundayStart(t),
     story: m.story || null, sleeping, session: m.session, parts: PARTS.map((p) => ({ ...p, level: m.parts[p.k] || 1 })),
     wishes: m.wishes.slice(0, 40), bugs: m.bugs.slice(0, 60), history: m.history.slice(0, 30),

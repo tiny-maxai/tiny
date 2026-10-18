@@ -60,7 +60,7 @@
       const fmt = (sec) => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
       function paint(v) {
         const img = $('#shockImg'), busy = v.phase === 'on' || v.phase === 'faint';
-        img.src = busy ? '/images/update/shock2.webp' : '/images/update/shock.webp';
+        img.src = v.phase === 'faint' ? '/images/update/faint-shock.webp' : busy ? '/images/update/shock2.webp' : '/images/update/shock.webp';
         let line = 'Today: ' + v.used + ' of ' + v.limit + ' used.';
         if (v.phase === 'on') line = 'Zap! She is getting the current... ' + fmt(v.endsIn);
         else if (v.phase === 'faint') line = 'She fainted. She wakes up in ' + fmt(v.endsIn) + '.';
@@ -113,7 +113,7 @@
 
   // ================= Memory =================
   let mems = [];
-  const CATN = { profile: 'About you', preference: 'Likes', project: 'Projects', people: 'People', plan: 'Plans', other: 'Other', self: 'About her' };
+  const CATN = { profile: 'About you', preference: 'Likes', project: 'Projects', people: 'People', plan: 'Plans', other: 'Other', self: 'About her', insight: 'Her thought' };
   let memTab = 'me';
   function renderMem() {
     const q = $('#memSearch').value.trim().toLowerCase();

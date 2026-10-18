@@ -39,6 +39,7 @@ export function buildSystem({ settings, mem, spoken = false, source = 'web', not
   const mine = [...(mem.selfAlways || []), ...(mem.selfFacts || [])];
   if (mine.length) lines.push(`WHAT YOU KNOW ABOUT YOURSELF (your personality, likes, friends, life and what they told you about you. Stay consistent and never contradict it):\n` + mine.map((f) => '- ' + f.text).join('\n'));
   if (mem.always.length) lines.push('WHAT YOU KNOW ABOUT THEM (who they are):\n' + mem.always.map((f) => '- ' + f.text).join('\n'));
+  if (mem.insights && mem.insights.length) lines.push('What you have noticed about them yourself, your own thoughts from thinking about them at night (use them quietly to understand them better; only say one out loud when it really fits, never list them):\n' + mem.insights.map((f) => '- ' + f.text).join('\n'));
   if (mem.facts.length) lines.push('Other things you remember about them:\n' + mem.facts.map((f) => '- ' + f.text).join('\n'));
   if (life) lines.push(life);
   if (mem.notes && mem.notes.length) lines.push('Their notes, already loaded for you. Read them and answer right away from them; never ask them to tell you to read the note or to paste it:\n' + mem.notes.map((n) => `- "${n.title}": ${n.text}`).join('\n'));

@@ -26,14 +26,15 @@ import { listDiary, writeDiary } from './lib/diary.js';
 import { outfitToday, outfitCount } from './lib/outfit.js';
 import { listAuto, saveAuto, deleteAuto, toggleAuto, runAuto } from './lib/auto.js';
 import { startCharge, batteryView, usePowerBank, powerLine, nightCharge } from './lib/battery.js';
-import { isSleeping } from './lib/her.js';
+import { isSleeping, moodNow } from './lib/her.js';
 import { sendStickerToOwner } from './lib/telegram.js';
 import { sickOf, sickView, careSick, makeSick, SICK } from './lib/sick.js';
 import { imageBytes } from './lib/extras.js';
 import { shockTick, startShock, shockView, levelOf } from './lib/shock.js';
 import { sundayStory } from './lib/maint.js';
 import { statusOf, periodView, monthOf, bondOf, prefsOf, cleanPrefs } from './lib/she.js';
-import { skillsOf, skillLevel, addSkill, delSkill } from './lib/skills.js';
+import { skillsOf, skillLevel, addSkill, delSkill, allSkills, editSkill, forgetSkillMem } from './lib/skills.js';
+import { sendPic, picPath, tokenIf } from './lib/pics.js';
 import { autoLevel } from './lib/period.js';
 import { getOcc, putOcc, addFestival, upcoming, TAGS, tagOf, chooseWear, todayOccasions } from './lib/occasion.js';
 import { getAmbient } from './lib/ambient.js';
@@ -43,6 +44,10 @@ import { periodNow } from './lib/period.js';
 import { getToday } from './lib/today.js';
 import { playTurn } from './lib/play.js';
 import { handleUpdate, setWebhook, webhookInfo } from './lib/telegram.js';
+import { knowsView } from './lib/knows.js';
+import { listFromText, remindList } from './lib/checklist.js';
+import { updateCard } from './lib/report.js';
+import { restyle, STYLES } from './lib/restyle.js';
 
 const MAX_BODY = 25 * 1024 * 1024; // 25 MB, enough for long voice clips. This is a safety size, not a usage limit.
 
@@ -70,7 +75,7 @@ export default {
     const p = url.pathname;
     if (p.startsWith('/img/')) {                       // pictures she drew (the id is a long random word)
       const b = await imageBytes(env, p.slice(5).replace(/\.jpg$/, ''));
-      return b ? new Response(b, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' } }) : new Response('not found', { status: 404 });
+      return b ? new Response(b, { headers: { 'content-type': b[0] === 0x89 && b[1] === 0x50 ? 'image/png' : 'image/jpeg', 'cache-control': 'public, max-age=86400' } }) : new Response('not found', { status: 404 });
     }
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
@@ -202,6 +207,17 @@ async function route(request, env, ctx, url, p) {
         await putHer(env, her);
         return json({ ok, report: rep, view: viewOf(her, st, t, { sleeping: isSleeping(st, her, t) }) });
       }
+      else if (a === 'skillInstall') {
+        if (!her.maint.session) return json({ error: 'New skills are installed during her update. Start the update first.' }, 400);
+        const waiting = skillsOf(her).filter((x) => x.installed === false && (b.all || x.id === String(b.id || '')));
+        if (!waiting.length) return json({ error: 'No skill is waiting.' }, 400);
+        waiting.forEach((x) => { x.installed = true; x.since = t; });
+        if (!skillsOf(her).some((x) => x.installed === false)) tickStep(her, 'skills');
+        her.maint.session.notes.push('Installed skill: ' + waiting.map((x) => x.name).join(', '));
+        await putHer(env, her);
+        await sendPic(env, 'newSkill', 'New skill installed: ' + waiting.map((x) => x.name).join(', ')).catch(() => false);
+        return json({ installed: waiting.map((x) => x.name), pic: picPath('newSkill'), view: viewOf(her, st, t, { sleeping: false }), report: await reportOf(env, her, st, { t }) });
+      }
       else if (a === 'wish') addWish(her, String(b.text || ''), { part: b.part, by: 'you', t });
       else if (a === 'wishStatus') setWish(her, String(b.id || ''), String(b.status || ''), t);
       else if (a === 'bugAdd') addBug(her, String(b.text || ''), { sev: b.sev === 'big' ? 'big' : 'small', by: 'you', t });
@@ -215,7 +231,7 @@ async function route(request, env, ctx, url, p) {
       if (wakeDue(her, t)) { const e = wakeUp(her, t); await attachFeedback(env, st, e); grumpyAfterUpdate(her, t); dirty = true; }
       if (dirty) await putHer(env, her);
     }
-    return json({ view: viewOf(her, st, t, { sleeping: isSleeping(st, her, t) }), report: await reportOf(env, her, st, { t }) });
+    return json({ view: viewOf(her, st, t, { sleeping: isSleeping(st, her, t) }), report: await reportOf(env, her, st, { t }), card: updateCard(her, st, t) });
   }
 
   // ---------- automation: goals she does by herself at a set time ----------
@@ -243,10 +259,12 @@ async function route(request, env, ctx, url, p) {
     if (m === 'POST') {
       const b = await readJson(request), a = String(b.action || '');
       const pr = periodNow(st);
-      if (a === 'skillAdd') { if (!addSkill(her, String(b.name || ''), { t })) return json({ error: 'Type a skill name, like Cooking.' }, 400); dirty = true; }
+      if (a === 'skillAdd') { if (!addSkill(her, String(b.name || ''), { t, prompt: b.prompt, installed: false })) return json({ error: 'Type a skill name, like Cooking.' }, 400); dirty = true; }
       else if (a === 'sickCare') { const r = careSick(her, String(b.what || '')); if (!r.ok) return json({ error: r.reason === 'notsick' ? 'She is not ill.' : 'You already did that one.' }, 400); dirty = true; }
       else if (a === 'makeSick') { makeSick(her, String(b.k || 'fever')); dirty = true; }
       else if (a === 'skillDel') { delSkill(her, String(b.id || '')); dirty = true; }
+      else if (a === 'skillEdit') { const r = editSkill(her, String(b.id || ''), { name: b.name, prompt: b.prompt }); if (r.error) return json({ error: r.error }, 400); dirty = true; }
+      else if (a === 'skillMemDel') { forgetSkillMem(her, String(b.id || ''), b.i === undefined ? 'all' : b.i); dirty = true; }
       else if (a === 'prefs') { her.prefs = { ...(her.prefs || {}), ...cleanPrefs(b.prefs) }; dirty = true; }
       else if (a === 'periodStart') {
         if (st.persona.gender !== 'girl') return json({ error: 'Periods are only for the girl character.' }, 400);
@@ -273,11 +291,11 @@ async function route(request, env, ctx, url, p) {
     const today = istDate(t), ym = String(b0(url.searchParams.get('ym')) || today.slice(0, 7));
     return json({
       name: st2.persona.name, girl: st2.persona.gender === 'girl',
-      status: statusOf(her, st2, { sleeping, outfit, t }), battery: batteryView(st2, her, t),
+      status: statusOf(her, st2, { sleeping, outfit, mood: (moodNow(her, st2, t) || {}).k || '', t }), battery: batteryView(st2, her, t),
       period: periodView(st2, t), month: monthOf(st2, /^\d{4}-\d{2}$/.test(ym) ? ym : today.slice(0, 7)), today,
       diary: await listDiary(env), outfitCount: await outfitCount(env).catch(() => 0),
       occasion: await (async () => { const occ = await getOcc(env), cnt = await outfitCount(env).catch(() => 0); return { birthday: occ.birthday, upcoming: upcoming(occ, t), today: todayOccasions(occ, t), tags: TAGS, wardrobe: Array.from({ length: cnt }, (_, i) => ({ n: i + 1, tag: tagOf(occ, i + 1) })), wearing: (outfit && outfit.n) || 0 }; })(),
-      skills: skillsOf(her).map((x) => ({ ...x, level: skillLevel(x), waiting: x.installed === false })), sick: sickView(her), sickKinds: SICK.map((x) => ({ k: x.k, name: x.name })), bond: await bondOf(env), prefs: prefsOf(her),
+      skills: allSkills(her), sick: sickView(her), sickKinds: SICK.map((x) => ({ k: x.k, name: x.name })), bond: await bondOf(env), prefs: prefsOf(her),
     });
   }
 
@@ -315,6 +333,7 @@ async function route(request, env, ctx, url, p) {
   }
 
   // ---------- chat (streams newline-delimited JSON) ----------
+  if (p === '/api/skills' && m === 'GET') return json({ skills: allSkills(await getHer(env)).map((x) => ({ slug: x.slug, name: x.name, pre: x.pre, level: x.level, waiting: x.waiting })) });
   if (p === '/api/chat' && m === 'POST') return chat(request, env, ctx);
 
   // ---------- conversations ----------
@@ -404,7 +423,7 @@ async function route(request, env, ctx, url, p) {
   }
   mt = p.match(/^\/api\/moods\/([\w-]+)$/);
   if (mt && m === 'DELETE') { await deleteMood(env, mt[1]); return json({ ok: true }); }
-  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre', 'sunday', 'maint', 'briefing', 'outfit', 'diary', 'occasion'].includes(b.what) ? b.what : null })); }
+  if (p === '/api/care/run' && m === 'POST') { const b = await readJson(request); return json(await runCare(env, { force: ['mood', 'miss', 'period', 'habit', 'dates', 'tease', 'nakhre', 'sunday', 'maint', 'briefing', 'outfit', 'diary', 'reflect', 'occasion'].includes(b.what) ? b.what : null })); }
 
   // ---------- make a file from voice chat: build it, send it to Telegram (or hand it back to download) ----------
   if (p === '/api/make' && m === 'POST') {
@@ -495,6 +514,16 @@ async function route(request, env, ctx, url, p) {
     return json({ raw, ...(await tidyPoints(env, raw, 'points', lang)) });
   }
   if (p === '/api/lists/tidy' && m === 'POST') { const b = await readJson(request); return json(await tidyPoints(env, b.text, b.mode === 'fix' ? 'fix' : 'points', ['en', 'hi', 'hinglish'].includes(b.lang) ? b.lang : '')); }
+  if (p === '/api/lists/from-text' && m === 'POST') { const b = await readJson(request); const l = await listFromText(env, String(b.text || ''), String(b.title || '')); return l ? json({ list: l }) : json({ error: 'I could not find a list in that message (I need at least 2 points).' }, 400); }
+  mt = p.match(/^\/api\/lists\/([\w-]+)\/remind$/);
+  if (mt && m === 'POST') { const b = await readJson(request); const task = await remindList(env, mt[1], Number(b.runAt)); return task ? json({ task }) : json({ error: 'Not found.' }, 404); }
+  if (p === '/api/knows' && m === 'GET') return json(await knowsView(env, await getHer(env)));
+  if (p === '/api/restyle' && m === 'POST') {
+    const key = String(url.searchParams.get('style') || '');
+    if (!STYLES[key]) return json({ error: 'Pick a style.' }, 400);
+    const r = await restyle(env, new Uint8Array(await request.arrayBuffer()), key);
+    return json({ id: r.id, url: '/img/' + r.id + '.jpg', left: r.left });
+  }
   mt = p.match(/^\/api\/lists\/([\w-]+)$/);
   if (mt) {
     if (m === 'GET') { const l = await getList(env, mt[1]); return l ? json({ list: l }) : json({ error: 'Not found.' }, 404); }
@@ -577,7 +606,7 @@ async function chat(request, env, ctx) {
   const prep = await prepareChat(env, { convId: b.convId || null, text, source: 'web', via, spoken, noteId: b.noteId || null, gate });
 
   let out;
-  try { out = await openStream(env, { brain: prep.settings.brain, messages: prep.messages, temperature: 0.8, maxTokens: 1800 }); }
+  try { out = await openStream(env, { brain: prep.brain || prep.settings.brain, messages: prep.messages, temperature: 0.8, maxTokens: prep.maxTokens || 1800 }); }
   catch (e) {
     // The user message is already saved; remove it so a retry does not duplicate it.
     if (prep.userMsgId) await env.DB.prepare('DELETE FROM messages WHERE id=?').bind(prep.userMsgId).run().catch(() => {});
@@ -592,7 +621,7 @@ async function chat(request, env, ctx) {
       const send = (o) => { try { controller.enqueue(enc.encode(JSON.stringify(o) + '\n')); } catch { /* client left */ } };
       send({ type: 'meta', convId: prep.convId, model: out.provider, fallback: out.fallback, at: now() });
       let full = '';
-      if (prep.image) { const pre = prep.pre ? prep.pre + '\n\n' : ''; send({ type: 'delta', text: pre + prep.image + '\n\n' }); full = pre + prep.image + '\n\n'; }
+      if (prep.image) { const dp = prep.pre && /\/img\/[a-z0-9]+\.jpg/i.test(prep.image) ? await tokenIf(env, 'drawing').catch(() => '') : ''; const pre = prep.pre ? prep.pre + '\n\n' + (dp ? dp + '\n\n' : '') : ''; send({ type: 'delta', text: pre + prep.image + '\n\n' }); full = pre + prep.image + '\n\n'; }
       try {
         full += await readStream(out.body, (t) => send({ type: 'delta', text: t }), ac.signal);
         if (!full.trim()) send({ type: 'error', error: "I couldn't think of a reply. Try again." });

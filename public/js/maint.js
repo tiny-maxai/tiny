@@ -11,12 +11,28 @@
     try { const d = await App.api('/api/maint', { body }); V = d.view; R = d.report; paint(); return d; }
     catch (e) { App.toast(e.message); if (e.data && e.data.left) { /* checklist still has steps */ } return null; }
   }
-  async function load() { try { const d = await App.api('/api/maint'); V = d.view; R = d.report; paint(); } catch (e) { App.toast(e.message); } }
+  function showInstalled(d) {          // the new-skill picture, after she installed a skill
+    const box = $('#mtSkills'); box.hidden = false;
+    box.innerHTML = '<div style="text-align:center"><img src="' + esc(d.pic) + '" alt="" onerror="this.remove()" style="max-width:100%;border-radius:18px"><p style="margin:8px 0 0"><b>New skill installed:</b> ' + esc(d.installed.join(', ')) + '</p></div>';
+    App.toast('Installed: ' + d.installed.join(', '));
+    if (App.loadSkills) App.loadSkills();
+    setTimeout(() => { if (!(V.pendingSkills || []).length) box.hidden = true; }, 12000);
+  }
+  function paintCard(c) {
+    if (!c) return;
+    const fill = (id, arr, empty) => { const b = $(id); b.textContent = ''; (arr.length ? arr : [empty]).forEach((x) => { const d = document.createElement('div'); d.textContent = x; if (!arr.length) d.className = 'rc-none'; b.appendChild(d); }); };
+    $('#mtCardVer').textContent = c.version + (c.at ? ' · ' + new Date(c.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) : '') + ' · health ' + c.health + '%';
+    fill('#rcGain', c.gained.map((x) => '+ ' + x), 'Nothing new yet');
+    fill('#rcBroke', c.broke.map((x) => '- ' + x), 'Nothing, she is fine');
+    fill('#rcWait', c.waiting.map((x) => '• ' + x), 'Nothing waiting');
+    $('#rcFoot').textContent = (c.fixed.length ? 'Fixed last update: ' + c.fixed.join('; ') + '. ' : '') + 'Next update: ' + new Date(c.nextAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'short' }) + '.';
+  }
+  async function load() { try { const d = await App.api('/api/maint'); V = d.view; R = d.report; paint(); paintCard(d.card); } catch (e) { App.toast(e.message); } }
 
   function paint() {
     if (!V) return;
     const h = V.health;
-    $('#mtImg').src = '/images/update/' + V.pose + '.webp';
+    { const im = $('#mtImg'); im.onerror = () => { im.onerror = null; im.src = '/images/update/newdress.webp'; }; im.src = '/images/update/' + V.pose + '.webp'; }
     $('#mtVer').textContent = V.version;
     const st = $('#mtState'); st.textContent = h.updating ? 'Under maintenance' : h.state; st.className = 'chip';
     const bar = $('#mtBar'); bar.dataset.s = h.state; bar.setAttribute('aria-valuenow', h.health); $('#mtFill').style.width = h.health + '%';
@@ -41,6 +57,12 @@
         const t = document.createElement('span'); t.textContent = s.label;
         l.append(c, t); box.appendChild(l);
       });
+      { const box2 = $('#mtSkills'), pend = V.pendingSkills || []; box2.textContent = ''; box2.hidden = !pend.length;
+        if (pend.length) {
+          const h = document.createElement('div'); h.className = 'muted'; h.style.cssText = 'font-size:13px;margin-bottom:6px'; h.textContent = 'New skills are waiting. Install them now so she can use them:'; box2.appendChild(h);
+          pend.forEach((k) => { const r = document.createElement('div'); r.className = 'mt-item'; r.innerHTML = '<div><b>' + esc(k.name) + '</b><small>Waiting to be installed</small></div>'; const b = document.createElement('button'); b.type = 'button'; b.className = 'mini-btn'; b.textContent = 'Install'; b.addEventListener('click', async () => { const d = await call({ action: 'skillInstall', id: k.id }); if (d && d.installed) showInstalled(d); }); r.appendChild(b); box2.appendChild(r); });
+          if (pend.length > 1) { const all = document.createElement('button'); all.type = 'button'; all.className = 'btn'; all.textContent = 'Install all'; all.addEventListener('click', async () => { const d = await call({ action: 'skillInstall', all: true }); if (d && d.installed) showInstalled(d); }); box2.appendChild(all); }
+        } }
       $('#mtNotes').textContent = ses.notes.length ? 'Notes so far:\n' + ses.notes.map((n) => '• ' + n).join('\n') : 'Tell her what to change in the chat (she saves it as notes), or add wishes below.';
     }
     // report

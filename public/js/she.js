@@ -4,7 +4,7 @@
   if (!App || !$('#view-she')) return;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const nice = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
-  const KIND = { updating: 'Updating', sleepcharge: 'Sleeping and charging', sleeping: 'Sleeping', charging: 'Charging', fainted: 'Fainted', outfit: 'Her outfit today', normal: 'Right now' };
+  const KIND = { jealous: 'Jealous', pain: 'In pain', sick: 'Ill', recovered: 'Better now', crying: 'Crying', lowbatt: 'Low battery', updated: 'Just updated', updating: 'Updating', sleepcharge: 'Sleeping and charging', sleeping: 'Sleeping', charging: 'Charging', fainted: 'Fainted', outfit: 'Her outfit today', normal: 'Right now' };
   const FLOWN = { period: 'Period', pms: 'Before her period', glow: 'Glowing and social', fresh: 'Fresh and energetic', calm: 'Calm and cosy' };
   let data = null, ym = '';
   const ST = { girl: true };
@@ -79,12 +79,41 @@
   }
   function paintSkills(list) {
     const box = $('#skList'); box.textContent = '';
-    if (!list.length) { box.innerHTML = '<div class="empty" style="padding:10px">No skills yet. When you finish her Sunday wish "learn to cook" she gets it too.</div>'; return; }
-    list.forEach((s) => {
-      const d = document.createElement('div'); d.className = 'mt-item';
-      d.innerHTML = '<div><b>' + esc(s.name) + '</b><small>' + (s.waiting ? 'Waiting for her next update to be installed' : 'Level ' + s.level + ' of 5 · used ' + (s.uses || 0) + ' times · say "use ' + esc(s.name.toLowerCase()) + ' skill"') + '</small></div>';
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'mini-btn'; b.textContent = 'Remove'; b.addEventListener('click', () => act({ action: 'skillDel', id: s.id })); d.appendChild(b); box.appendChild(d);
-    });
+    const mine = list.filter((s) => !s.pre), built = list.filter((s) => s.pre);
+    const head = (t) => { const h = document.createElement('div'); h.className = 'muted'; h.style.cssText = 'font-size:12.5px;margin:10px 0 4px'; h.textContent = t; box.appendChild(h); };
+    head('Your skills');
+    if (!mine.length) { const e = document.createElement('div'); e.className = 'empty'; e.style.padding = '8px'; e.textContent = 'None yet. Add one above, or finish her Sunday wish "learn to cook" and she gets it too.'; box.appendChild(e); }
+    const line = (s) => (s.waiting ? 'Waiting for her next update. She cannot use it until the update installs it.' : 'Level ' + s.level + ' of 5 · used ' + (s.uses || 0) + ' times · type /skill-' + s.slug) + (s.prompt ? ' · has your notes' : '') + (s.mem && s.mem.length ? ' · remembers ' + s.mem.length + ' thing' + (s.mem.length > 1 ? 's' : '') : '');
+    const row = (s) => {
+      const d = document.createElement('div'); d.className = 'mt-item'; d.style.flexWrap = 'wrap';
+      const info = document.createElement('div'); info.innerHTML = '<b>' + esc(s.name) + '</b><small>' + esc(line(s)) + '</small>'; d.appendChild(info);
+      const bx = document.createElement('div'); bx.style.cssText = 'display:flex;gap:6px';
+      const eb = document.createElement('button'); eb.type = 'button'; eb.className = 'mini-btn'; eb.textContent = 'Edit'; bx.appendChild(eb);
+      if (!s.pre) { const rb = document.createElement('button'); rb.type = 'button'; rb.className = 'mini-btn'; rb.textContent = 'Remove'; rb.addEventListener('click', () => { if (confirm('Remove the skill "' + s.name + '"?')) act({ action: 'skillDel', id: s.id }); }); bx.appendChild(rb); }
+      d.appendChild(bx);
+      const ed = document.createElement('div'); ed.hidden = true; ed.style.cssText = 'flex-basis:100%;margin-top:8px';
+      let h = '';
+      if (!s.pre) h += '<input class="in" data-f="name" maxlength="40" placeholder="Skill name" style="width:100%;margin-bottom:6px">';
+      h += '<textarea class="in" data-f="prompt" rows="4" maxlength="700" placeholder="What this skill should do, how she should answer, what she must know..." style="width:100%;resize:vertical"></textarea>';
+      h += '<small class="muted">' + (s.pre ? 'Built-in skill: your notes are added to what she already knows. Leave empty to go back to normal.' : 'Changes work at once. Only a brand new skill waits for an update.') + '</small>';
+      h += '<div data-f="mem" style="margin-top:6px"></div><div style="display:flex;gap:6px;margin-top:8px"><button type="button" class="btn" data-f="save">Save</button><button type="button" class="btn ghost" data-f="cancel">Cancel</button></div>';
+      ed.innerHTML = h; d.appendChild(ed);
+      const q = (f) => ed.querySelector('[data-f="' + f + '"]');
+      if (q('name')) q('name').value = s.name; q('prompt').value = s.prompt || '';
+      const mem = q('mem');
+      if (s.mem && s.mem.length) {
+        const t = document.createElement('div'); t.className = 'muted'; t.style.cssText = 'font-size:12.5px;margin-bottom:3px'; t.textContent = 'What she remembers in this skill:'; mem.appendChild(t);
+        s.mem.forEach((m, i) => { const r = document.createElement('div'); r.style.cssText = 'display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:2px 0'; const sp = document.createElement('span'); sp.textContent = m.t; const x = document.createElement('button'); x.type = 'button'; x.className = 'mini-btn'; x.textContent = 'Forget'; x.addEventListener('click', () => act({ action: 'skillMemDel', id: s.id, i })); r.append(sp, x); mem.appendChild(r); });
+      }
+      eb.addEventListener('click', () => { ed.hidden = !ed.hidden; });
+      q('cancel').addEventListener('click', () => { ed.hidden = true; });
+      q('save').addEventListener('click', async () => { const body = { action: 'skillEdit', id: s.id, prompt: q('prompt').value.trim() }; if (q('name')) body.name = q('name').value.trim(); if (await act(body)) App.toast('Saved.'); });
+      return d;
+    };
+    mine.forEach((s) => box.appendChild(row(s)));
+    head('Built-in skills (always on)');
+    built.forEach((s) => box.appendChild(row(s)));
+    if (window.App && App.loadSkills) App.loadSkills();
   }
   const PF = { food: '#pfFood', colour: '#pfColour', song: '#pfSong', hobby: '#pfHobby', place: '#pfPlace', likes: '#pfLikes', dislikes: '#pfDislikes', annoys: '#pfAnnoys' };
   function paintPrefs(p) { Object.keys(PF).forEach((k) => { const el = $(PF[k]); if (document.activeElement !== el) el.value = p[k] || ''; }); }
@@ -111,11 +140,11 @@
   $('#feAdd').addEventListener('click', async () => { if (await act({ action: 'festAdd', name: $('#feName').value, date: $('#feDate').value, yearly: true })) { $('#feName').value = ''; App.toast('Saved. On that day she will ask what to wear.'); } });
   $('#sickBtns').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) act({ action: 'sickCare', what: b.dataset.w }); });
   $('#sickMake').addEventListener('click', () => act({ action: 'makeSick', k: $('#sickPick').value }));
-  $('#skAdd').addEventListener('click', async () => { const v = $('#skName').value.trim(); if (!v) return; if (await act({ action: 'skillAdd', name: v })) $('#skName').value = ''; });
+  $('#skAdd').addEventListener('click', async () => { const v = $('#skName').value.trim(); if (!v) return; if (await act({ action: 'skillAdd', name: v, prompt: $('#skPrompt').value.trim() })) { $('#skName').value = ''; $('#skPrompt').value = ''; } });
   $('#skName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#skAdd').click(); });
   $('#pfSave').addEventListener('click', async () => { const prefs = {}; Object.keys(PF).forEach((k) => { prefs[k] = $(PF[k]).value; }); if (await act({ action: 'prefs', prefs })) App.toast('She will remember this.'); });
   $('#diaryNow').addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; b.textContent = 'Writing...'; await act({ action: 'diary' }); b.disabled = false; b.textContent = "Write tonight's page now"; });
   $('#outNew').addEventListener('click', () => act({ action: 'outfit' }));
   const orig = App.showView;
-  App.showView = (v) => { orig(v); if (v === 'she') load(); };
+  App.showView = (v) => { orig(v); if (v === 'she' || v === 'skills') load(); };
 })();

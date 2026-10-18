@@ -119,6 +119,12 @@
     if (!cur || !confirm('Delete this list?')) return;
     try { await App.api('/api/lists/' + cur.id, { method: 'DELETE' }); cur = null; $('#listEd').hidden = true; $('#listsHome').hidden = false; load(); } catch (e) { App.toast(e.message); }
   });
+  $('#lRemind').addEventListener('click', () => { const r = $('#lRemRow'); const show = r.style.display === 'none' || r.hidden; r.hidden = !show; r.style.display = show ? 'flex' : 'none'; if (show && !$('#lRemAt').value) { const d = new Date(Date.now() + 3600000); d.setMinutes(0, 0, 0); const p = (n) => String(n).padStart(2, '0'); $('#lRemAt').value = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':00'; } });
+  $('#lRemGo').addEventListener('click', async () => {
+    if (!cur) return; const v = $('#lRemAt').value, at = Date.parse(v); if (!v || !Number.isFinite(at) || at < Date.now()) { App.toast('Pick a time in the future.'); return; }
+    await flush();
+    try { await App.api('/api/lists/' + cur.id + '/remind', { body: { runAt: at } }); App.toast('Reminder set. She will remind you about this list.', 4000); $('#lRemRow').style.display = 'none'; } catch (e) { App.toast(e.message); }
+  });
   $('#lClear').addEventListener('click', () => { if (!cur) return; cur.items = cur.items.filter((x) => !x.done); paintItems(); queue(); });
   $('#lFix').addEventListener('click', async (e) => {
     if (!cur || !cur.items.length) return;

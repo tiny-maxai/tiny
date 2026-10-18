@@ -66,10 +66,12 @@
     maint: ['Updates', 'Her maintenance, versions and bugs.'],
     lists: ['Lists', 'Speak it, she makes the points.'],
     auto: ['Automation', 'Goals she does by herself, on time.'],
+    skills: ['Skills', 'What she can do and what she is learning.'],
     she: ['She', 'Everything about her.'],
     tasks: ['Reminders', 'Things I do for you, on time.'],
     mood: ['Mood', 'How are you feeling today?'],
     persona: ['Act like a girl', 'Her name, her vibe, her voice.'],
+    knows: ['What she knows', 'Everything she remembers about you, by topic.'],
     memory: ['Memory', 'Everything I remember about you.'],
     history: ['History', 'All your chats in one place.'],
   };
@@ -238,6 +240,7 @@
     mk('i-speaker', 'Listen', (b) => { if (b.classList.contains('on')) { App.stopSpeak(); b.classList.remove('on'); return; } b.classList.add('on'); App.speak(text).finally(() => b.classList.remove('on')); });
     mk('i-copy', 'Copy', async (b) => { try { await navigator.clipboard.writeText(text); b.querySelector('span').textContent = 'Copied'; setTimeout(() => (b.querySelector('span').textContent = 'Copy'), 1500); } catch { App.toast('Could not copy'); } });
     mk('i-note', 'Note', async (b) => { const ok = await App.saveAsNote(text); if (ok) b.querySelector('span').textContent = 'Saved'; });
+    if (/^\s*(?:[-•*]|\d{1,2}[.)])\s+\S/m.test(text) && (text.match(/^\s*(?:[-•*]|\d{1,2}[.)])\s+\S/gm) || []).length >= 3) mk('i-list', 'Checklist', async (b) => { try { const r = await App.api('/api/lists/from-text', { body: { text } }); b.querySelector('span').textContent = 'Saved'; App.toast('Checklist saved: ' + r.list.title + '. Open Lists to tick it.', 4500); } catch (e) { App.toast(e.message); } });
     mk('i-pin', 'Remember', async (b) => { try { await App.api('/api/memories', { body: { text: text.slice(0, 400), importance: 4 } }); b.querySelector('span').textContent = 'Saved'; refreshStatus(); } catch (e) { App.toast(e.message); } });
     bubble.appendChild(a);
   }
@@ -273,9 +276,10 @@
   // Sends a message and streams the reply into the chat. Returns the final reply text.
   App.send = async (override, opts = {}) => {
     const fromBox = typeof override !== 'string';
-    const text = (fromBox ? input.value : override).trim();
+    let text = (fromBox ? input.value : override).trim();
     if (!text || App.busy) return null;
     if (fromBox && text.startsWith('/') && App.slash && (await App.slash(text))) { input.value = ''; grow(); return null; }
+    if (fromBox && App.skillPrefix) text = App.skillPrefix(text);          // a skill chip is armed: this message starts with /skill-name
     const w = $('.welcome'); if (w) w.remove();
     App.busy = true; idleSleep = false; lastActive = Date.now();
     App.restPose(); setMode(true);

@@ -152,12 +152,20 @@
   const ov = $('#voiceOv'), orb = $('#orb'), vState = $('#vState'), vText = $('#vText');
   let on = false, handle = null, phase = 'idle', muted = false, turns = 0, t0 = 0, tick = null;
   const fmt = (ms) => { const s2 = Math.floor(ms / 1000); return Math.floor(s2 / 60) + ':' + String(s2 % 60).padStart(2, '0'); };
-  function setOrb(cls) { orb.classList.toggle('speaking', cls === 'speaking'); orb.classList.toggle('listening', cls === 'listening'); }
+  // the orb swells with your voice (listening) and breathes with a soft pulse while she talks or thinks
+  let simRaf = 0, simT = 0;
+  const lv = (v) => orb.style.setProperty('--lv', Math.max(0, Math.min(1, v)).toFixed(3));
+  function sim(k) { simT += .09; lv((Math.sin(simT) * .5 + .5) * (Math.sin(simT * 2.7) * .5 + .5) * k); simRaf = requestAnimationFrame(() => sim(k)); }
+  function setOrb(cls) {
+    orb.classList.toggle('speaking', cls === 'speaking'); orb.classList.toggle('listening', cls === 'listening'); orb.classList.toggle('thinking', cls === 'thinking');
+    cancelAnimationFrame(simRaf); simRaf = 0;
+    if (cls === 'speaking') sim(.8); else if (cls === 'thinking') sim(.25); else if (cls !== 'listening') lv(0);
+  }
   function setPhase(p, msg) {
     phase = p;
     vState.textContent = { idle: 'Tap the orb and talk', listening: 'Listening…', thinking: 'Thinking…', speaking: App.settings.persona.name + ' is talking' }[p];
     if (msg !== undefined) vText.textContent = msg;
-    setOrb(p === 'listening' ? 'listening' : p === 'speaking' ? 'speaking' : null);
+    setOrb(p === 'listening' ? 'listening' : p === 'speaking' ? 'speaking' : p === 'thinking' ? 'thinking' : null);
     if (p === 'thinking') App.flashPose('explain', 20000);
   }
   // ---------- create a PDF / HTML by voice ----------
@@ -218,10 +226,10 @@
       let blob = null;
       try {
         setPhase('listening'); App.charState.listening = true; App.restPose();
-        handle = listen({ onLevel: (l) => { orb.style.transform = 'scale(' + (1 + l * 0.18).toFixed(3) + ')'; } });
+        handle = listen({ onLevel: (l) => lv(l * 1.1) });
         blob = await handle.promise;
       } catch (e) { micError(e); break; }
-      finally { orb.style.transform = ''; App.charState.listening = false; }
+      finally { lv(0); App.charState.listening = false; }
       const timedOut = handle && handle.timedOut; handle = null;
       if (!on || muted) break;
       if (!blob) { if (timedOut) { setPhase('idle', 'Tap the orb when you want to talk.'); break; } continue; }

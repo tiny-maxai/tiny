@@ -183,12 +183,12 @@
   function drawMenu() {
     const v = inp.value;
     if (!v.startsWith('/') || /\s/.test(v)) { menu.hidden = true; return; }
-    items = CMDS.filter((c) => c[0].startsWith(v.toLowerCase())); sel = Math.min(sel, Math.max(0, items.length - 1));
+    items = CMDS.concat(App.skillCmds ? App.skillCmds() : []).filter((c) => c[0].startsWith(v.toLowerCase())); sel = Math.min(sel, Math.max(0, items.length - 1));
     if (!items.length) { menu.hidden = true; return; }
     menu.innerHTML = ''; menu.hidden = false;
     items.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('role', 'option'); b.className = i === sel ? 'on' : ''; b.innerHTML = `<b>${c[0]}</b><span>${esc(c[1])}</span>`; b.addEventListener('click', () => pickCmd(c[0])); menu.appendChild(b); });
   }
-  function pickCmd(c) { inp.value = c + (['/remember', '/remind'].includes(c) ? ' ' : ''); menu.hidden = true; inp.focus(); inp.dispatchEvent(new Event('input')); if (!['/remember', '/remind'].includes(c)) App.send(); }
+  function pickCmd(c) { const wait = ['/remember', '/remind'].includes(c) || c.startsWith('/skill-'); inp.value = c + (wait ? ' ' : ''); menu.hidden = true; inp.focus(); inp.dispatchEvent(new Event('input')); if (!wait) App.send(); }
   inp.addEventListener('input', () => { sel = 0; drawMenu(); });
   inp.addEventListener('keydown', (e) => {
     if (menu.hidden) return;

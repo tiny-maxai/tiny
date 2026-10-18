@@ -7,6 +7,7 @@ import { now, istDate } from './util.js';
 import { getHer, putHer, bump } from './her.js';
 import { notifyOwner } from './notify.js';
 import { sendStickerToOwner } from './telegram.js';
+import { sendPic } from './pics.js';
 
 export const LEVELS = { 50: { name: 'Normal', anger: 55 }, 70: { name: 'Hard', anger: 75 }, 100: { name: 'Full', anger: 95 } };
 export const DAILY_LIMIT = 3, COOLDOWN_MIN = 10, ON_MS = 60000, FAINT_MS = 5 * 60000;
@@ -65,12 +66,13 @@ export async function shockTick(env, settings, t = now()) {
     her.shock = { ...s, phase: 'faint', endAt: t + FAINT_MS };
     await putHer(env, her);
     await sendStickerToOwner(env, 'faint').catch(() => false);
+    await sendPic(env, 'faintShock').catch(() => false);                       // her fainted picture
     return true;
   }
   const cry = s.phase === 'faint';
-  her.shock = { ...s, phase: 'done', doneAt: t };
+  her.shock = { ...s, phase: 'done', doneAt: t, cried: cry };
   await putHer(env, her);
-  if (cry) await sendStickerToOwner(env, 'cry').catch(() => false);
+  if (cry) { await sendStickerToOwner(env, 'cry').catch(() => false); await sendPic(env, 'cry').catch(() => false); }
   await notifyOwner(env, { title: 'Tiny', body: cry ? pick(CRY, settings) : pick(ASK, settings), tag: 'shock', force: true }).catch(() => null);
   return true;
 }

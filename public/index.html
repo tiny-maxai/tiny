@@ -61,12 +61,14 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-skill" viewBox="0 0 24 24"><path d="M12 2l2.6 6.4L21 9.3l-4.9 4.3 1.5 6.7L12 16.8 6.4 20.3l1.5-6.7L3 9.3l6.4-.9z" fill="#fff"/></symbol>
   <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.7z" fill="#fff"/></symbol>
   <symbol id="i-tg" viewBox="0 0 24 24"><path d="M21.5 3.5 2.8 10.7c-.9.4-.8 1.6.1 1.9l4.5 1.4 1.7 5.3c.2.7 1.1.9 1.6.4l2.5-2.4 4.6 3.4c.6.4 1.4.1 1.6-.6L22.9 5c.2-1-.7-1.9-1.4-1.5z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 14.3 17 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4.5h-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3.5v12m0 0-4.5-4.5M12 15.5l4.5-4.5M4.5 20.5h15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.9 2-1.8 0-1.2-1-1.5-1-2.7 0-1 .8-1.7 1.9-1.7H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z" fill="#EDE9FE" stroke="#7C3AED" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7.8" cy="11" r="1.3" fill="#7C3AED"/><circle cx="10.5" cy="7.2" r="1.3" fill="#60A5FA"/><circle cx="15" cy="7.8" r="1.3" fill="#A78BFA"/></symbol>
   <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5 4 4 0 0 1 17.5 18z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <!-- idea tags -->
   <symbol id="t-build" viewBox="0 0 24 24"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z" fill="#E4DEFF" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M3.8 7.2 12 12l8.2-4.8M12 12v9.3" stroke="currentColor" stroke-width="1.6" fill="none"/></symbol>
@@ -105,8 +107,10 @@
       <button data-view="mood"><svg class="ic"><use href="#i-mood"/></svg>Mood</button>
       <button data-view="maint"><svg class="ic"><use href="#i-wrench"/></svg>Updates</button>
       <button data-view="auto"><svg class="ic"><use href="#i-bolt"/></svg>Automation</button>
+      <button data-view="skills"><svg class="ic"><use href="#i-skill"/></svg>Skills</button>
       <button data-view="she"><svg class="ic"><use href="#i-heart"/></svg>She</button>
       <button data-view="persona"><svg class="ic"><use href="#i-heart"/></svg>Act like a girl</button>
+      <button data-view="knows"><svg class="ic"><use href="#i-heart"/></svg>What she knows</button>
       <button data-view="memory"><svg class="ic"><use href="#i-brain"/></svg>Memory<span class="badge" id="memBadge" hidden>0</span></button>
       <button data-view="history"><svg class="ic"><use href="#i-clock"/></svg>History</button>
     </nav>
@@ -149,10 +153,12 @@
             </div>
           </div>
           <div class="note-ctx glass" id="noteCtx" hidden><svg class="ic" style="width:17px;height:17px"><use href="#i-note"/></svg><span>Talking about <b id="noteCtxTitle"></b></span><button class="mini" id="noteCtxX" type="button" aria-label="Stop talking about this note"><svg class="ic" style="width:15px;height:15px"><use href="#i-x"/></svg></button></div>
+          <div class="skillbar" id="skillBar" hidden role="toolbar" aria-label="Skills"></div>
           <div class="slash glass" id="slash" hidden role="listbox"></div>
           <div class="composer glass">
             <div class="composer-row">
               <button class="c-btn" id="attachBtn" type="button" title="Attach a picture, PDF, HTML or text file" aria-label="Attach a picture, PDF, HTML or text file"><svg class="ic"><use href="#i-cloud"/></svg></button>
+              <button class="c-btn" id="styleBtn" type="button" title="Change the style of a picture (cartoon, black and white...)" aria-label="Change picture style"><svg class="ic"><use href="#i-palette"/></svg></button>
               <input type="file" id="fileInput" hidden accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.csv,.json,.html,.htm,.xml,.js,.py,.c,.cpp,.java,application/pdf,text/*">
               <textarea id="input" rows="1" placeholder="Message your friend…" aria-label="Message" autocomplete="off"></textarea>
               <button class="c-btn" id="micBtn" type="button" title="Tap to speak, tap again to send to the box" aria-label="Dictate"><svg class="ic"><use href="#i-mic"/></svg></button>
@@ -224,6 +230,20 @@
           <div class="card glass"><h3 class="mt-h">Your automations</h3><div id="auList"></div></div>
         </div>
       </section>
+      <!-- SKILLS -->
+      <section class="view" id="view-skills">
+        <div class="scroll">
+          <h2 class="page-h">Skills</h2>
+          <p class="page-s">What she can do, what is waiting for her next update, and how to use each skill.</p>
+          <div class="card glass">
+            <h3 class="mt-h">Skills</h3>
+            <p class="muted" style="margin:0 0 10px">She already knows 14 built-in skills (including Shopping and lists) and uses them by herself when the topic fits. <b>A skill you add waits for her next update: she cannot use it until the update installs it.</b> In chat, tap a skill above the message box, or type <b>/skill-cooking</b> and your question, for her full expert answer. Add your own skill below and write in the notes what she should know or do. The more she uses a skill, the better she gets.</p>
+            <div class="grid" style="grid-template-columns:1fr auto;gap:8px"><input class="in" id="skName" maxlength="40" placeholder="Skill name: Singing, Driving, Maths tricks..."><button class="btn" id="skAdd" type="button">Add skill</button></div>
+            <textarea class="in" id="skPrompt" rows="3" maxlength="700" placeholder="Your notes for this skill (optional): how she should answer, what she must know, her style in it..." style="margin-top:8px;width:100%;resize:vertical"></textarea>
+            <div id="skList" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </section>
       <section class="view" id="view-she">
         <div class="scroll">
           <h2 class="page-h">She</h2>
@@ -293,12 +313,6 @@
             <div class="she-bar"><div class="she-bar-in" id="bondBar"></div></div><small class="muted" id="bondTxt"></small>
           </div>
 
-          <div class="card glass">
-            <h3 class="mt-h">Skills</h3>
-            <p class="muted" style="margin:0 0 10px">Add a skill, then say "use cooking skill" and she answers like an expert. The more she uses it, the better she gets.</p>
-            <div class="grid" style="grid-template-columns:1fr auto;gap:8px"><input class="in" id="skName" maxlength="40" placeholder="Cooking, Singing, Driving..."><button class="btn" id="skAdd" type="button">Add skill</button></div>
-            <div id="skList" style="margin-top:10px"></div>
-          </div>
 
           <div class="card glass">
             <h3 class="mt-h">Her likes and dislikes</h3>
@@ -362,6 +376,7 @@
           <div class="card glass" id="mtSession" hidden>
             <h3 class="mt-h">Update checklist <small class="muted">(she is silent 🔕 until it is complete)</small></h3>
             <div class="mt-steps" id="mtSteps"></div>
+            <div id="mtSkills" hidden style="margin:10px 0"></div>
             <div class="mt-btns"><button class="btn" id="mtDone" type="button">Update complete</button><button class="btn ghost" id="mtForce" type="button">Complete anyway</button></div>
             <p class="muted" id="mtNotes" style="white-space:pre-line;margin:8px 0 0"></p>
           </div>
@@ -373,6 +388,15 @@
           <div class="card glass"><h3 class="mt-h">Repair log (bugs)</h3>
             <div class="list-add"><input class="in" id="mtBugIn" placeholder="Something that is wrong with her" maxlength="260"><label class="mt-big"><input type="checkbox" id="mtBugBig"> big</label><button class="btn" id="mtBugAdd" type="button">Add</button></div>
             <div class="mt-list" id="mtBugs"></div></div>
+          <div class="card glass" id="mtCard">
+            <h3 class="mt-h">Update report card <small class="muted" id="mtCardVer"></small></h3>
+            <div class="rc-cols">
+              <div class="rc-col"><b class="rc-h rc-g">Gained</b><div id="rcGain"></div></div>
+              <div class="rc-col"><b class="rc-h rc-r">Broken right now</b><div id="rcBroke"></div></div>
+              <div class="rc-col"><b class="rc-h rc-b">Waiting</b><div id="rcWait"></div></div>
+            </div>
+            <small class="muted" id="rcFoot"></small>
+          </div>
           <div class="card glass"><h3 class="mt-h">Version history</h3><div class="mt-list" id="mtHist"></div></div>
         </div>
       </section>
@@ -391,7 +415,8 @@
           <div class="stage-top"><button class="icon-btn" id="lBack" type="button" aria-label="Back to lists"><svg class="ic"><use href="#i-back"/></svg></button><input class="note-title" id="lTitle" placeholder="New list" maxlength="120" aria-label="List title"><button class="icon-btn" id="lDel" type="button" aria-label="Delete list"><svg class="ic"><use href="#i-trash"/></svg></button></div>
           <div class="list-add"><input class="in" id="lAdd" placeholder="Add a point and press Enter" maxlength="400" aria-label="Add a point"><button class="btn" id="lAddBtn" type="button">Add</button><button class="btn ghost" id="lMic" type="button" aria-label="Speak points"><svg class="ic" style="width:18px;height:18px"><use href="#i-mic"/></svg><span>Speak</span></button></div>
           <div class="list-items" id="lItems"></div>
-          <div class="note-actions"><button class="btn ghost" id="lFix" type="button">Fix grammar</button><button class="btn ghost" id="lClear" type="button">Remove ticked</button><span class="muted" id="lCount" style="align-self:center"></span></div>
+          <div id="lRemRow" hidden style="display:none;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0"><input class="in" type="datetime-local" id="lRemAt" aria-label="Remind me at" style="max-width:230px"><button class="btn" id="lRemGo" type="button">Set reminder</button></div>
+          <div class="note-actions"><button class="btn ghost" id="lFix" type="button">Fix grammar</button><button class="btn ghost" id="lClear" type="button">Remove ticked</button><button class="btn ghost" id="lRemind" type="button">Remind me</button><span class="muted" id="lCount" style="align-self:center"></span></div>
         </div>
       </section>
 
@@ -555,6 +580,24 @@
       </section>
 
       <!-- MEMORY -->
+      <section class="view" id="view-knows">
+        <div class="scroll">
+          <h2 class="page-h">What she knows about you</h2>
+          <p class="page-s">Everything she remembers about you, by topic. Tap Forget on any line and she lets it go.</p>
+          <div id="knowsBox"></div>
+        </div>
+      </section>
+      <div class="mt-modal" id="styleModal" hidden role="dialog" aria-modal="true" aria-label="Change picture style">
+        <div class="mt-box glass" style="max-height:92vh;overflow:auto">
+          <h3 style="margin:0 0 6px">Change a picture</h3>
+          <p class="muted" style="margin:0 0 10px;font-size:13px">Pick a photo, then a look. Filters are instant. Styles (cartoon, anime...) are drawn by her AI and take a few seconds (12 a day).</p>
+          <input type="file" id="styleFile" accept="image/*" class="in" style="width:100%">
+          <div id="styleStage" hidden style="margin-top:10px"><img id="styleImg" alt="Your picture" style="width:100%;border-radius:14px;display:block"><small class="muted" id="styleMsg" style="display:block;margin-top:6px"></small>
+            <div class="muted" style="font-size:12.5px;margin:10px 0 4px">Instant filters</div><div class="chips" id="styleFilters"></div>
+            <div class="muted" style="font-size:12.5px;margin:10px 0 4px">AI styles</div><div class="chips" id="styleAi"></div></div>
+          <div style="display:flex;gap:8px;margin-top:12px"><a class="btn" id="styleDl" download="tiny-picture.jpg" hidden>Download</a><button class="btn ghost" id="styleClose" type="button">Close</button></div>
+        </div>
+      </div>
       <section class="view" id="view-memory">
         <div class="scroll">
           <h2 class="page-h">Memory</h2>
@@ -620,6 +663,9 @@
 <script src="/js/care.js"></script>
 <script src="/js/auto.js"></script>
 <script src="/js/she.js"></script>
+<script src="/js/knows.js"></script>
+<script src="/js/restyle.js"></script>
+<script src="/js/skillbar.js"></script>
 <script src="/js/handsfree.js"></script>
 <script src="/js/i18n-data.js"></script>
 <script src="/js/i18n.js"></script>
