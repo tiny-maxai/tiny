@@ -1,3 +1,5 @@
+import { relHint } from './rel.js';
+import { isActive, ACTIVATE_HINT, FEAR_HINT, recapHint, logTurn } from './activate.js';
 // The chat pipeline shared by the website and Telegram:
 // save the message, recall memories, build the prompt, (stream) the answer, save it, learn new facts.
 import { uid, now, clip, plainChat } from './util.js';
@@ -70,17 +72,19 @@ export async function prepareChat(env, { convId, text, source = 'web', via = 'te
   const dream = task ? '' : await dreamHint(env).catch(() => '');
   const past = task ? '' : await pastTalk(env, text).catch(() => '');          // "what did I say about that exam?"
   const carry = cm && SOOTHABLE.has(cm.k) && now() - (cm.born || cm.since || now()) > 5 * 3600000 ? `You are STILL ${cm.k}${cm.reason ? ' because ' + cm.reason : ''}, it carried over from before. If this is the first message of a new day, let it show (cold or hurt, not over it yet).` : '';
-  const extra = [humanRule(settings.persona.gender === 'girl'), prefsHint(herNow), bond ? `YOUR CLOSENESS WITH THEM: level ${bond.level} of ${bond.of} (${bond.name}). ${bond.talk} Never mention the level or its name.` : '', skillHint(sk), settings.persona.gender === 'girl' ? GARTER_LINE : '', settings.persona.gender === 'girl' && !(sk && sk.deep && !sk.pending) ? TEXT_STYLE : '', settings.persona.gender === 'girl' ? GIRL_TALK : '', settings.persona.gender === 'girl' && !task && isPrivateTalk(text) ? PRIVATE_HINT : '', carry, dream, past, occ.hint].filter(Boolean).join('\n');
+  const collar = task ? false : await isActive(env, 'chat'), collarSk = task ? false : await isActive(env, 'skills');
+  const relH = task ? '' : relHint(herNow, text);
+  const extra = [relH, spoken ? 'VOICE LANGUAGE RULE: in voice mode you speak ONLY Hindi (Devanagari or Hinglish) or English, matching the language they used. If they spoke another language it was already translated for you: answer in Hindi or English, and you may briefly say what you understood. Never reply in any other language.' : '', humanRule(settings.persona.gender === 'girl'), prefsHint(herNow), bond ? `YOUR CLOSENESS WITH THEM: level ${bond.level} of ${bond.of} (${bond.name}). ${bond.talk} Never mention the level or its name.` : '', skillHint(sk), settings.persona.gender === 'girl' ? GARTER_LINE : '', settings.persona.gender === 'girl' && !(sk && sk.deep && !sk.pending) ? TEXT_STYLE : '', settings.persona.gender === 'girl' ? GIRL_TALK : '', settings.persona.gender === 'girl' && !task && isPrivateTalk(text) ? PRIVATE_HINT : '', carry, dream, past, occ.hint, collar ? ACTIVATE_HINT : (!task && /\b(collar|activate|garter|robot mode)\b/i.test(text) ? FEAR_HINT : '') ||  (task ? '' : await recapHint(env, text).catch(() => ''))].filter(Boolean).join('\n');
   const system = buildSystem({ settings, mem, spoken, source, note, task, moods, period, done: helped.done, web: helped.web, notes: helped.notes, moodKind: tinyMoodNow(settings, { lastActive: last, her: g.her || herNow, period, ambient: amb }), hint: g.hint || '', life: lifeLines(lifeNow), ambient: ambientLines(amb), extra });
   // skills get the stronger model and more room; a plain tip keeps the normal one
-  const deepSkill = !!(sk && sk.deep && !sk.pending && !sk.unknown), brain = deepSkill ? 'smart' : (sk && sk.skill && settings.brain === 'lite' ? 'fast' : settings.brain);
-  return { convId: id, userMsgId, settings, brain, maxTokens: deepSkill ? 2400 : null, image: occ.image, pre: occ.pre, messages: [{ role: 'system', content: system }, ...history] };
+  const deepSkill = !!(sk && sk.deep && !sk.pending && !sk.unknown), brain = (deepSkill || collar || (collarSk && sk && sk.skill)) ? 'smart' : (sk && sk.skill && settings.brain === 'lite' ? 'fast' : settings.brain);
+  return { convId: id, userMsgId, settings, brain, maxTokens: (deepSkill || (collarSk && sk && sk.skill)) ? 2400 : (collar ? 1200 : null), image: occ.image, pre: occ.pre, messages: [{ role: 'system', content: system }, ...history] };
 }
 
 // Saves the reply and learns from it. Safe to run in the background.
 export async function finishChat(env, { convId, userMsgId, text, reply, model, source = 'web', settings }) {
   const t = now();
-  const ins = await env.DB.prepare('INSERT INTO messages (conv_id,role,content,model,created_at) VALUES (?,?,?,?,?)').bind(convId, 'assistant', reply, model || null, t).run();
+  const ins = await env.DB.prepare('INSERT INTO messages (conv_id,role,content,model,created_at) VALUES (?,?,?,?,?)').bind(convId, 'assistant', source === 'routine' ? reply : plainChat(reply), model || null, t).run();
   await env.DB.prepare('UPDATE conversations SET updated_at=? WHERE id=?').bind(t, convId).run();
   const botId = ins.meta && ins.meta.last_row_id;
   const her = source === 'routine' ? {} : await getHer(env);
@@ -93,6 +97,7 @@ export async function finishChat(env, { convId, userMsgId, text, reply, model, s
     source !== 'routine' ? afterReply(env, settings || {}, { text, reply }) : null,
     extractAndStore(env, { convId, userText: text, reply, source: source === 'telegram' ? 'telegram' : 'auto', brain: 'fast', review: !!(settings && settings.reviewMemories) && !creator, name: (settings && settings.persona && settings.persona.name) || 'Tiny', creator }),
   ]);
+  if (source !== 'routine') await logTurn(env, text, reply);                 // collar mode: kept so she can read it back later
   if (skUsed) await learnSkillFacts(env, her, skUsed, text);                // lasting things they told her for this skill
 }
 

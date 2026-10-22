@@ -1,3 +1,4 @@
+import { isActive } from './activate.js';
 // Update 19 helpers: mood buttons, /status card, quiet hours, voice and typing moods, drawing pictures,
 // the garter fear, patch notes, and her own daily care routines (sickness, love messages, outfit moments).
 import { now, istDate, clip, uid } from './util.js';
@@ -97,7 +98,7 @@ export function shapeSpeech(text, kind) {
   else if (kind === 'angry' || kind === 'hurt' || kind === 'hate' || kind === 'sulky') s = s.replace(/!+/g, '.');
   return s;
 }
-export const voiceStyle = (kind) => ({ sleepy: 'whisper', lazy: 'whisper', hyper: 'cheerful', shaky: 'sad', sick: 'whisper', sad: 'sad', hurt: 'sad' }[kind] || '');
+export const voiceStyle = (kind) => ({ sleepy: 'whisper', lazy: 'whisper', hyper: 'cheerful', happy: 'cheerful', shaky: 'sad', sick: 'whisper', sad: 'sad', hurt: 'sad', in_pain: 'sad', angry: 'angry', hate: 'angry', jealous: 'angry', love: 'whisper', flirty: 'cheerful', sassy: 'cheerful' }[kind] || '');
 // how fast she answers on Telegram: { delay (ms), react, typos }
 export function moodPace(kind, healthLow = false) {
   const base = { angry: { delay: 9000, react: '👀' }, hate: { delay: 9000, react: '👀' }, hurt: { delay: 6000, react: '👀' }, sulky: { delay: 6000, react: '👀' }, jealous: { delay: 4000, react: '👀' }, clingy: { delay: 0, react: '🥰' }, love: { delay: 0, react: '❤' }, flirty: { delay: 800, react: '😘' }, sleepy: { delay: 5000, react: '', typos: true }, lazy: { delay: 4000, react: '', typos: true }, sick: { delay: 3500, react: '', typos: true } }[kind] || { delay: 0, react: '' };
@@ -129,7 +130,7 @@ export function imagePrompt(text) {
 export async function makeImage(env, prompt) {
   if (!env.AI) throw Object.assign(new Error('Drawing is not set up (Workers AI is missing).'), { status: 503 });
   const day = istDate(), key = 'img:count:' + day, n = Number(await env.KV.get(key).catch(() => 0)) || 0;
-  if (n >= 10) throw Object.assign(new Error('That is enough drawing for today (10 a day).'), { status: 429 });
+  if (n >= 10 && !(await isActive(env, 'pictures'))) throw Object.assign(new Error('That is enough drawing for today (10 a day).'), { status: 429 });
   const r = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: clip(prompt, 300), steps: 4 });
   const b64 = r && (r.image || (typeof r === 'string' ? r : '')); if (!b64) throw new Error('No picture came back.');
   const id = uid().replace(/[^a-z0-9]/gi, '').slice(0, 14);

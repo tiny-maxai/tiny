@@ -45,7 +45,7 @@ export function bytesToB64(bytes) {
 
 // Telegram shows raw markdown: turn bold, headings and tables into plain text-message style.
 export function plainChat(text) {
-  return String(text || '').replace(/^[ \t]*\|?[ \t:|-]{3,}\|?[ \t]*$\n?/gm, '').replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (m, row) => row.split('|').map((c) => c.trim()).filter(Boolean).join(', ')).replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+  return String(text || '').replace(/^[ \t]*\|?[ \t:|-]{3,}\|?[ \t]*$\n?/gm, '').replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (m, row) => row.split('|').map((c) => c.trim()).filter(Boolean).join(', ')).replace(/^#{1,6}\s+/gm, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/\n{3,}/g, '\n\n').trim().replace(/^[ \t]*\*+[ \t]*$/gm, '').replace(/\*{1,3}\s*(["“”])|(["“”])\s*\*{1,3}/g, '$1$2').replace(/(^|[\s(])\*{1,3}([^*\n]{1,80}?)\*{1,3}(?=[\s).,!?:;…]|$)/g, '$1$2').replace(/(\S)\*+(?=\s|$)|(^|\s)\*+(?=\S)/g, '$1$2').replace(/^\s*(["“])([^"“”\n]+)(["”])\s*$/, '$2').replace(/[ \t]{2,}/g, ' ').trim();
 }
 export const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 

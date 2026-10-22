@@ -101,3 +101,9 @@ CREATE TABLE IF NOT EXISTS lists (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lists_updated ON lists(updated_at DESC);
+CREATE TABLE IF NOT EXISTS usage (
+  day TEXT NOT NULL,
+  k   TEXT NOT NULL,
+  n   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, k)
+);

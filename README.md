@@ -325,3 +325,39 @@ Skills now have their own page in the menu. A skill you add waits for her next u
 **Update 22:** (1) Telegram "/" menu (skills, status, mood, diary, lists, report, today, water, health, image, style, sick, quiet, dates, new) is registered automatically on the first message; /skills now has buttons; new /diary, /report, /lists (tick items with buttons, set a reminder). (2) Reply memory: swipe-replies carry the day of the old message, and questions like "what did I say about that exam?" search the saved chat and answer from it. (3) New page "What she knows" groups memories by topic (plus her nightly insights and per-skill memories) with Forget on each line. (4) Any list she writes gets a "Make a checklist" button (web and Telegram) that saves a tick-off list on the Lists page; lists have a Remind me button. (5) Update report card (gained, broken, waiting) on the Updates page and /report. (6) Picture styles: palette button next to the attach button (instant filters in the browser plus AI styles cartoon/anime/sketch/oil/watercolor/pixel/comic/3D clay/neon), and on Telegram send or swipe-reply a photo and write "make it cartoon" or /style. Groq has no image editing model, so AI styles use Cloudflare Workers AI image-to-image (@cf/runwayml/stable-diffusion-v1-5-img2img), free inside the Workers AI daily allowance, capped at 12 a day.
 
 **Update 22b:** the voice screen orb now follows the "Voice powered orb" design: a soft morphing blob in your purple and blue colours that swells and glows with your voice while you talk, breathes softly while she talks, swirls while she thinks, and sends out rings when it is live.
+
+## Update 23
+- Fixed: the period page only had "started today"; now you can pick the date (and change it later). Any uncaught error now shows a toast instead of a dead button.
+- Collar mode (She page or /activate, 10 minutes): she says yes, daily picture/skill/dress limits are lifted, the strongest model answers. Clean and kind rules stay. Shock limits and sleep stay.
+- Voice mode speaks Hindi and English only. Other languages are detected by Whisper and translated first.
+- Her boyfriend card (She page): name, how they met, places, story chapters. Intimate questions get a nervous "yes, but that is private".
+
+## Update 23b
+- Collar mode: rests 1 hour between uses, pick what it covers (Chat, Pictures, Skills), tap twice to start, "Add 10 more minutes" (max 30 at once), strong model for skills, stronger picture styling, glowing orb and She strip, and a countdown badge in the header.
+- Voice: replies of any length are spoken in full (no more cut-off), adaptive end-of-speech pauses, per-sentence Hindi / Hinglish / English voice, language chips on every turn ("Translated from Gujarati"), orb speed and tint follow her mood.
+- Chat text: stray `*`, `*"` and wrapping quotes are removed on screen, in Telegram and in saved history; she is told not to write them.
+- 23c: the voice screen text (what you said, what she says) is cleaned of `*` and wrapping quotes too.
+
+## Update 24: robot collar mode
+- Collar mode is now robot mode: no girl feelings, flat and frank, says yes to everything, makes up first-person stories for any "your ..." topic. Intimate stories are told as a private, non-graphic confession.
+- Will not start (and ends itself) when she is ill, on her period, asleep, or in an update.
+- When it ends she reads back what she said and reacts nervously and differently per message ("I know you will ask me... I do not want to go to that mode"). If you ask about it later she gets shy and will not repeat it.
+
+## Update 24b
+- She hates losing control: talk about the collar and she begs ("please please do not..."). On the voice screen there is an Activate button: the first press she pleads, the second press (within 9 seconds) turns her into a robot with no emotions. Press again to stop.
+- Default weather place is now Sironj (an old saved "Indore" is switched to Sironj too).
+
+## Update 24c
+- Voice: shorter speech pieces (about 190 characters) so the voice never runs out of room mid-sentence; each piece has a timeout and retries; a clip that stalls for 5 seconds is skipped; if the cloud voice keeps failing she switches to the browser voice instead of hanging; 3 pieces are fetched ahead.
+- Girl feel: emotion style per mood (angry, sad, cheerful, whisper) and her pitch follows her mood and speed, with a small girl lift.
+- Network: a dropped connection before an answer is retried twice automatically; in voice chat a failed turn no longer ends the call (it listens again; it stops only after 3 failures in a row).
+
+## Update 25
+- Sarvam Hindi voice: paste a free key in Settings (Voice), Save, then "Test Hindi voice". The key is kept in KV (or set SARVAM_API_KEY as a secret, which wins).
+- Voice chat speaks each finished sentence while she is still writing (first sound in about a second). Tapping the orb while she talks now interrupts her (stops the voice and the answer).
+- Free limits meter (Settings): Worker requests, KV reads/writes/lists, Workers AI calls and Groq requests left today (read from Groq's headers). A push/Telegram warning is sent once a day at 80%. Run the schema (a new `usage` table is created automatically).
+
+## Update 25b
+- Five girl voices, no sliders: Hannah (sweet, default), Autumn (soft), Diana (bubbly), Luna (young), Athena (mature). Each has its own English voice, Sarvam Hindi speaker (priya, ritu, kavya, neha, pooja), pace and browser-voice pitch. Her mood still changes how she sounds.
+- Change the voice inside voice chat with the new voice button (plays a sample). Settings has the same five.
+- The Sarvam key you set in Cloudflare (`SARVAM_API_KEY`) is used automatically; the paste box is hidden when it is set. Telegram voice notes use the chosen voice too.

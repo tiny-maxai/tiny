@@ -16,27 +16,70 @@
 
   // ---------- speak ----------
   const plain = (t) => String(t || '').replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]*)`/g, '$1').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/https?:\/\/\S+/g, '').replace(/^#{1,6}\s*/gm, '').replace(/[*_~>#]+/g, '').replace(/^\s*[-+]\s+/gm, '').replace(/\s*\.{3,}|…/g, ', ').replace(/\s+/g, ' ').trim();
-  function chunk(text) {
-    const parts = text.match(/[^.!?।\n]+[.!?।]*\s*/g) || [text];
-    const out = []; let cur = '';
-    for (const p of parts) { if ((cur + p).length > 260 && cur) { out.push(cur.trim()); cur = p; } else cur += p; }
-    if (cur.trim()) out.push(cur.trim());
-    return out.slice(0, 14);
+  function chunk(text) {                                   // short pieces (about 190 characters): they start fast and the voice never runs out of room mid-sentence
+    const MAX = 190, out = []; let cur = '';
+    const push = (x) => { x = x.trim(); if (x) out.push(x); };
+    const sentences = text.match(/[^.!?।\n]+[.!?।]*\s*/g) || [text];
+    for (let sn of sentences) {
+      while (sn.length > MAX) {                              // a very long sentence: cut at a comma or a space
+        let k = Math.max(sn.lastIndexOf(', ', MAX), sn.lastIndexOf('; ', MAX)); if (k < 60) k = sn.lastIndexOf(' ', MAX); if (k < 60) k = MAX;
+        if (cur) { push(cur); cur = ''; } push(sn.slice(0, k + 1)); sn = sn.slice(k + 1);
+      }
+      if ((cur + sn).length > MAX && cur) { push(cur); cur = sn; } else cur += sn;
+    }
+    push(cur);
+    return out.slice(0, 120);
   }
   // Her voice follows her mood: slower and softer when sleepy or sad, brighter and faster when happy or hyper.
   const MOOD_VOICE = { sleepy: [0.82, 0.9], sleeping: [0.82, 0.9], sad: [0.88, 0.92], in_pain: [0.85, 0.95], clingy: [0.92, 1.08], flirty: [0.95, 1.12], sulky: [0.95, 0.92], moody: [0.97, 1.0], happy: [1.05, 1.1], sassy: [1.05, 1.05], jealous: [1.05, 0.95], love: [0.93, 1.1], hurt: [0.86, 0.9], hate: [1.08, 0.85], angry: [1.1, 0.88], hyper: [1.18, 1.2], lazy: [0.88, 0.95] };
   const moodVoice = () => { const m = MOOD_VOICE[App.herKind] || [1, 1]; return { rate: m[0], pitch: m[1] }; };
+  // Five girl voices with their tuned speed and browser-voice pitch. No sliders: these are the best settings for each.
+  const VOICES = [
+    { id: 'hannah', name: 'Hannah', desc: 'sweet and friendly', rate: 1.0, pitch: 1.3 },
+    { id: 'autumn', name: 'Autumn', desc: 'soft and calm', rate: 0.97, pitch: 1.2 },
+    { id: 'diana', name: 'Diana', desc: 'bright and bubbly', rate: 1.04, pitch: 1.4 },
+    { id: 'luna', name: 'Luna', desc: 'young and light', rate: 1.02, pitch: 1.45 },
+    { id: 'athena', name: 'Athena', desc: 'mature and confident', rate: 0.97, pitch: 1.1 },
+  ];
+  App.VOICES = VOICES;
+  const curVoice = () => VOICES.find((v) => v.id === (App.settings.voice || {}).girl) || VOICES[0];
   let token = 0, curUrl = null;
-  function fetchClip(text) {
-    return App.api('/api/tts', { raw: true, body: { text } }).then(async (r) => { if (!r.ok) return null; return URL.createObjectURL(await r.blob()); }).catch(() => null);
+  const HW = new Set('hai hain hoon ho tha thi the kya nahi nahin haan acha achha accha theek thik mujhe tumhe tum aap main mera meri mere tera teri apna yaar arre abhi kal aaj bahut bohot kuch koi kaise kyun kyu toh bhi se ko ka ki ke par lekin aur nhi h hu'.split(' '));
+  function langOf(text) {                                    // hindi (Devanagari), hinglish (Hindi in English letters) or english
+    if (DEV.test(text)) return 'hindi';
+    const w = String(text).toLowerCase().match(/[a-z]+/g) || []; if (w.length < 3) return 'english';
+    const n = w.filter((x) => HW.has(x)).length; return n >= 2 && n / w.length >= 0.22 ? 'hinglish' : 'english';
+  }
+  App.langOf = langOf;
+  async function fetchClip(text, tries = 3) {
+    for (let a = 0; a < tries; a++) {
+      const ac = new AbortController(), to = setTimeout(() => ac.abort(), 14000);
+      try {
+        const r = await App.api('/api/tts', { raw: true, signal: ac.signal, body: { text, lang: langOf(text) } });
+        if (r.ok) { const b = await r.blob(); if (b.size > 300) return URL.createObjectURL(b); }
+        else if (r.status === 422 || r.status === 400) return null;                         // this voice cannot say it: use the browser voice
+      } catch (e) { /* timeout or network: try again */ }
+      finally { clearTimeout(to); }
+      await new Promise((ok) => setTimeout(ok, 700 * (a + 1)));                            // a short rest, the free voice has a rate limit
+    }
+    return null;
   }
   function playUrl(url, my) {
     return new Promise((resolve) => {
       if (my !== token) return resolve();
-      const done = () => { audio.onended = audio.onerror = null; resolve(); };
+      let wd = null, last = -1, still = 0;
+      const done = () => { clearInterval(wd); audio.onended = audio.onerror = null; resolve(); };
       audio.onended = done; audio.onerror = done;
-      audio.src = url; audio.playbackRate = Math.min(2, Math.max(0.5, (App.settings.voice.rate || 1) * moodVoice().rate));
+      // girl voice: pitch follows speed (a little higher when excited or angry, lower and softer when sad), and a small lift for a girl
+      const girl = App.settings.persona.gender !== 'boy';
+      try { audio.preservesPitch = false; audio.mozPreservesPitch = false; audio.webkitPreservesPitch = false; } catch (e) { /* ignore */ }
+      audio.src = url; audio.playbackRate = Math.min(2, Math.max(0.5, (girl ? curVoice().rate * 1.03 : 1) * moodVoice().rate));
       audio.play().catch(done);
+      wd = setInterval(() => {                                   // a clip that stops moving for 5 seconds is skipped, so she never gets stuck
+        if (my !== token) return done();
+        if (audio.paused && !audio.ended) { still++; } else if (audio.currentTime === last) { still++; } else { still = 0; last = audio.currentTime; }
+        if (still >= 5) done();
+      }, 1000);
     });
   }
   function pickVoice(lang) {
@@ -50,11 +93,13 @@
     return new Promise((resolve) => {
       if (my !== token || !window.speechSynthesis) return resolve();
       const u = new SpeechSynthesisUtterance(text);
-      const lang = DEV.test(text) ? 'hi-IN' : 'en-IN'; u.lang = lang;
+      const lang = langOf(text) === 'english' ? 'en-IN' : 'hi-IN'; u.lang = lang;
       const v = pickVoice(lang); if (v) u.voice = v;
       const v2 = App.settings.voice;
-      const mv = moodVoice(); u.rate = Math.min(2, Math.max(0.5, (v2.rate || 1) * mv.rate)); u.pitch = Math.min(2, Math.max(0.5, (App.settings.persona.gender === 'boy' ? Math.max(0.6, (v2.pitch || 1) - 0.45) : Math.max(1.15, v2.pitch || 1.25)) * mv.pitch));
-      u.onend = u.onerror = () => resolve();
+      const mv = moodVoice(); u.rate = Math.min(2, Math.max(0.5, (App.settings.persona.gender === 'boy' ? 1 : curVoice().rate) * mv.rate)); u.pitch = Math.min(2, Math.max(0.5, (App.settings.persona.gender === 'boy' ? 0.8 : curVoice().pitch) * mv.pitch));
+      let fin = false; const end = () => { if (!fin) { fin = true; clearTimeout(cap); resolve(); } };
+      const cap = setTimeout(() => { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } end(); }, 6000 + text.length * 90);   // the browser voice can freeze: never wait forever
+      u.onend = u.onerror = end;
       speechSynthesis.speak(u);
     });
   }
@@ -72,16 +117,61 @@
     try {
       const browserOnly = App.settings.voice.engine === 'browser';
       const parts = chunk(clean);
-      const clips = browserOnly ? [] : parts.map(fetchClip);
+      const clips = []; let bad = 0; const want = (i) => { if (!browserOnly && bad < 2 && i < parts.length && !clips[i]) clips[i] = fetchClip(parts[i], bad ? 1 : 3); };
+      setOrbPace(moodVoice().rate); want(0); want(1); want(2);
       for (let i = 0; i < parts.length; i++) {
         if (my !== token) break;
-        const url = browserOnly ? null : await clips[i];
+        want(i + 3);
+        const url = browserOnly || !clips[i] ? null : await clips[i];
+        if (!browserOnly && clips[i] && !url) bad++; else if (url) bad = 0;       // the cloud voice keeps failing: use the browser voice for the rest
+        if (my === token && vChips) showReplyLang(langOf(parts[i]));
         if (url) { await playUrl(url, my); URL.revokeObjectURL(url); }
         else await playBrowser(parts[i], my);
       }
     } finally {
       if (my === token) { App.charState.speaking = false; setOrb(null); App.restPose(); }
     }
+  };
+
+  // Speak while she is still writing: every finished sentence goes to the voice at once, so long answers start talking in about a second.
+  App.speakStream = () => {
+    App.stopSpeak();
+    const my = ++token, browserOnly = App.settings.voice.engine === 'browser';
+    const parts = [], clips = []; let fed = 0, i = 0, ended = false, running = false, bad = 0, resolveDone, started = false;
+    const done = new Promise((r) => { resolveDone = r; });
+    const want = (k) => { if (!browserOnly && bad < 2 && k < parts.length && !clips[k]) clips[k] = fetchClip(parts[k], bad ? 1 : 3); };
+    async function run() {
+      if (running) return; running = true;
+      App.charState.speaking = true; App.restPose(); setOrb('speaking'); setOrbPace(moodVoice().rate);
+      if (on && phase === 'thinking') setPhase('speaking');            // she is talking while she writes: tapping the orb now interrupts her
+      try {
+        for (;;) {
+          if (my !== token) break;
+          if (i < parts.length) {
+            want(i); want(i + 1); want(i + 2);
+            const url = browserOnly || !clips[i] ? null : await clips[i];
+            if (!browserOnly && clips[i] && !url) bad++; else if (url) bad = 0;
+            if (my !== token) break;
+            if (vChips) showReplyLang(langOf(parts[i]));
+            if (url) { await playUrl(url, my); URL.revokeObjectURL(url); } else await playBrowser(parts[i], my);
+            i++;
+          } else if (ended) break;
+          else await new Promise((r) => setTimeout(r, 60));
+        }
+      } finally { if (my === token) { App.charState.speaking = false; setOrb(null); App.restPose(); } resolveDone(); }
+    }
+    function take(raw, final) {                              // cut off the finished sentences from what has arrived so far
+      if (my !== token) return;
+      let rest = raw.slice(fed), cut = 0;
+      if (final) cut = rest.length;
+      else { const re = /[.!?।\n]+(?=\s)/g; let m; while ((m = re.exec(rest))) cut = m.index + m[0].length; if (cut < (started ? 40 : 14)) cut = 0; }   // not a tiny fragment like "Hi."
+      if (!cut) return;
+      const piece = rest.slice(0, cut); fed += cut;
+      const clean = plain(piece); if (!clean) return;
+      for (const c of chunk(clean)) parts.push(c);
+      started = true; run();
+    }
+    return { feed: (full) => take(String(full || ''), false), finish: (full) => { take(String(full || ''), true); ended = true; if (!parts.length) { running = true; resolveDone(); } }, done, cancel: () => { ended = true; } };
   };
 
   // ---------- listen ----------
@@ -101,7 +191,7 @@
       ac = new (window.AudioContext || window.webkitAudioContext)();
       const an = ac.createAnalyser(); an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
       const buf = new Uint8Array(an.fftSize);
-      const t0 = Date.now(); let lastVoice = t0, floor = 0, n = 0;
+      const t0 = Date.now(); let lastVoice = t0, floor = 0, n = 0, sm = 0, vSince = 0, talked = 0;
       return new Promise((resolve) => {
         const cleanup = () => { clearInterval(timer); try { stream.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ } try { ac.close(); } catch { /* ignore */ } };
         rec.onstop = () => { cleanup(); resolve(cancelled || !spoke ? null : new Blob(chunks, { type: (rec.mimeType || mime || 'audio/webm').split(';')[0] })); };
@@ -113,8 +203,12 @@
           if (now - t0 < 400) { floor = (floor * n + rms) / (n + 1); n++; }
           const thr = Math.max(0.025, floor * 2.6);
           if (onLevel) onLevel(Math.min(1, rms * 6));
-          if (rms > thr) { spoke = true; lastVoice = now; }
-          if (spoke && now - lastVoice > silenceMs) handle.stop();
+          sm = sm * 0.6 + rms * 0.4;                                         // smoothed, so one click or cough does not count
+          if (sm > thr) { if (!vSince) vSince = now; if (now - vSince > 160) { spoke = true; lastVoice = now; talked += 80; } }
+          else if (sm < thr * 0.8) vSince = 0;                              // real quiet (not a dip inside a word)
+          // short answer: end fast. A long thought: wait longer, people pause mid-sentence.
+          const wait = talked < 1800 ? Math.min(silenceMs, 1000) : talked > 7000 ? silenceMs + 700 : silenceMs;
+          if (spoke && now - lastVoice > wait) handle.stop();
           else if (!spoke && now - t0 > idleMs) { handle.timedOut = true; handle.cancel(); }
           else if (now - t0 > maxMs) handle.stop();
         }, 80);
@@ -123,7 +217,9 @@
     return handle;
   }
   async function transcribe(blob) {
-    const r = await App.api('/api/stt', { body: blob, headers: { 'Content-Type': blob.type || 'audio/webm' } });
+    const r = await App.api('/api/stt?voice=1', { body: blob, headers: { 'Content-Type': blob.type || 'audio/webm' } });
+    transcribe.note = r.translated ? 'You said (' + (r.lang || 'other language') + '): ' + (r.original || '') : '';
+    transcribe.meta = { lang: r.lang || '', translated: !!r.translated };
     return (r.text || '').trim();
   }
   const micError = (e) => App.toast(e && /denied|permission|notallowed/i.test(e.name + e.message) ? 'Microphone permission is blocked' : (e.message || 'Could not use the microphone'));
@@ -150,12 +246,29 @@
 
   // ---------- voice chat screen ----------
   const ov = $('#voiceOv'), orb = $('#orb'), vState = $('#vState'), vText = $('#vText');
-  let on = false, handle = null, phase = 'idle', muted = false, turns = 0, t0 = 0, tick = null;
+  let on = false, handle = null, phase = 'idle', muted = false, turns = 0, t0 = 0, tick = null, fails = 0;
   const fmt = (ms) => { const s2 = Math.floor(ms / 1000); return Math.floor(s2 / 60) + ':' + String(s2 % 60).padStart(2, '0'); };
   // the orb swells with your voice (listening) and breathes with a soft pulse while she talks or thinks
   let simRaf = 0, simT = 0;
   const lv = (v) => orb.style.setProperty('--lv', Math.max(0, Math.min(1, v)).toFixed(3));
   function sim(k) { simT += .09; lv((Math.sin(simT) * .5 + .5) * (Math.sin(simT * 2.7) * .5 + .5) * k); simRaf = requestAnimationFrame(() => sim(k)); }
+  const tidy = (t) => String(t || '').replace(/\*+\s*["“]([^"“”]*)["”]\s*\*+/g, '$1').replace(/\*{1,3}\s*["“”]|["“”]\s*\*{1,3}/g, (m) => m.replace(/[*\s]/g, '')).replace(/(^|\s)\*{1,3}([^*\n]{1,80}?)\*{1,3}(?=[\s).,!?:;…]|$)/g, '$1$2').replace(/(\S)\*+(?=\s|$)|(^|\s)\*+(?=\S)/g, '$1$2').replace(/\*\*|__|`/g, '').replace(/^\s*["“]([^"“”\n]+)["”]\s*$/, '$1').trim();
+  const vChips = $('#vChips');
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  const chip = (cls, txt) => '<span class="vchip ' + cls + '">' + esc(txt) + '</span>';
+  let youChip = '', replyChip = '';
+  function drawChips() { if (vChips) vChips.innerHTML = youChip + replyChip; }
+  function showYouLang(text) {
+    const m = transcribe.meta || {}; replyChip = '';
+    youChip = m.translated ? chip('tr', 'Translated from ' + (cap(m.lang) || 'another language')) : chip('', 'You: ' + (langOf(text) === 'english' ? 'English' : langOf(text) === 'hinglish' ? 'Hinglish' : 'Hindi'));
+    drawChips();
+  }
+  function showReplyLang(l) { const t = 'She: ' + (l === 'english' ? 'English' : l === 'hinglish' ? 'Hinglish' : 'Hindi'); const c = chip('me', t); if (replyChip !== c) { replyChip = c; drawChips(); } }
+  function setOrbPace(rate) {                                   // slower and calmer when she is sad or sleepy, quicker when excited
+    const o = $('#orb'); if (!o) return;
+    o.style.setProperty('--spd', String(Math.min(1.6, Math.max(0.7, 1 / (rate || 1)))));
+    o.classList.toggle('slow', rate < 0.94); o.classList.toggle('fast', rate > 1.06);
+  }
   function setOrb(cls) {
     orb.classList.toggle('speaking', cls === 'speaking'); orb.classList.toggle('listening', cls === 'listening'); orb.classList.toggle('thinking', cls === 'thinking');
     cancelAnimationFrame(simRaf); simRaf = 0;
@@ -164,7 +277,7 @@
   function setPhase(p, msg) {
     phase = p;
     vState.textContent = { idle: 'Tap the orb and talk', listening: 'Listening…', thinking: 'Thinking…', speaking: App.settings.persona.name + ' is talking' }[p];
-    if (msg !== undefined) vText.textContent = msg;
+    if (msg !== undefined) vText.textContent = tidy(msg);
     setOrb(p === 'listening' ? 'listening' : p === 'speaking' ? 'speaking' : p === 'thinking' ? 'thinking' : null);
     if (p === 'thinking') App.flashPose('explain', 20000);
   }
@@ -220,8 +333,10 @@
   App._vt = { ask: (kind, text) => askCreate({ kind, text }), answer: answerAsk, mode: setCreate, kindOf, topicOf };
   $('#vCreate').addEventListener('click', () => { unlock(); setCreate(!createMode); if (createMode && on && !muted && phase === 'idle' && !handle) loop(); });
 
+  let loopId = 0;
   async function loop() {
-    while (on) {
+    const me = ++loopId;                                             // only the newest loop runs (an interrupt starts a new one)
+    while (on && me === loopId) {
       while (making) await sleep(150);
       let blob = null;
       try {
@@ -247,12 +362,19 @@
       if (createMode && /^\s*(normal|chat|baat karte|create (off|band|mode off)|create mode (off|band))/i.test(text)) { setCreate(false); continue; }
       const wants = createMode ? { kind: kindOf(text), text } : (kindOf(text) && VERB.test(text) ? { kind: kindOf(text), text } : null);
       if (wants) { $('#vYou').textContent = 'You: ' + text; await askCreate(wants); continue; }
-      $('#vYou').textContent = 'You: ' + text; vText.textContent = ''; turns++;
-      const reply = await App.send(text, { via: 'voice', spoken: true, silent: true, onText: (t) => { vText.textContent = t.slice(-280); } });
+      $('#vYou').textContent = 'You: ' + tidy(text) + (transcribe.note ? '  (translated)' : ''); vText.textContent = transcribe.note ? transcribe.note.slice(0, 200) : ''; turns++; showYouLang(text);
+      const sp = App.speakStream();
+      const reply = await App.send(text, { via: 'voice', spoken: true, silent: true, onText: (t) => { vText.textContent = tidy(t).slice(-280); sp.feed(t); } });
       if (!on) break;
-      if (!reply) { setPhase('idle', 'Something went wrong. Tap the orb to try again.'); break; }
-      vText.textContent = reply.length > 320 ? reply.slice(0, 320) + '…' : reply;
-      setPhase('speaking'); await App.speak(reply);
+      if (me !== loopId) { App.stopSpeak(); break; }
+      if (!reply) {                                                              // network hiccup: say so, wait a moment, keep listening (give up after 3 in a row)
+        App.stopSpeak();
+        if (++fails >= 3) { setPhase('idle', 'The connection is not working. Tap the orb to try again.'); break; }
+        vText.textContent = 'Lost the connection for a second. Say that again.'; await sleep(1200); continue;
+      }
+      fails = 0;
+      { const r2 = tidy(reply); vText.textContent = r2.length > 320 ? r2.slice(0, 320) + '…' : r2; }
+      setPhase('speaking'); sp.finish(reply); await sp.done;
     }
     if (on && phase !== 'idle') setPhase('idle');
   }
@@ -279,7 +401,7 @@
   orb.addEventListener('click', () => {
     unlock();
     if (phase === 'listening' && handle) { handle.stop(); return; }   // done talking, send it now
-    if (phase === 'speaking') { App.stopSpeak(); if (on) { setPhase('idle'); loop(); } return; }
+    if (phase === 'speaking') { App.stopSpeak(); App.stopChat(); if (on) { setPhase('idle'); loop(); } return; }
     if (phase === 'thinking') return;
     if (muted) { App.toast('You are muted'); return; }
     if (!on) on = true;
@@ -292,4 +414,22 @@
   $('#vMute').addEventListener('click', () => setMuted(!muted));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && on) close(); });
   $('#vTest').addEventListener('click', () => { unlock(); App.speak('Hi! This is how I sound. Tell me if you want me softer or faster.'); });
+
+  // ---------- change her voice from inside the voice screen ----------
+  const vList = $('#vVoices'), vBtn = $('#vVoice');
+  const paintVoices = () => {
+    const girl = App.settings.persona.gender !== 'boy'; vBtn.hidden = !girl; if (!girl) { vList.hidden = true; return; }
+    $('#vVoiceName').textContent = curVoice().name;
+    vList.innerHTML = VOICES.map((v) => '<button type="button" role="option" class="vv' + (v.id === curVoice().id ? ' on' : '') + '" data-id="' + v.id + '"><b>' + v.name + '</b><small>' + v.desc + '</small></button>').join('');
+  };
+  async function pickVoice2(id) {
+    try { await App.saveSettings({ voice: { girl: id } }); } catch (e) { App.toast(e.message); return; }
+    paintVoices(); vList.hidden = true;
+    App.speak('Hi, this is how I sound. Do you like my voice?');
+  }
+  vBtn.addEventListener('click', () => { paintVoices(); vList.hidden = !vList.hidden; });
+  vList.addEventListener('click', (e) => { const b = e.target.closest('button[data-id]'); if (b) pickVoice2(b.dataset.id); });
+  document.addEventListener('settings:changed', () => paintVoices());
+  App.paintVoices = paintVoices;
+  setTimeout(paintVoices, 1500);
 })();

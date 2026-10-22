@@ -174,7 +174,7 @@
     if (!fillFeel.first) { fillFeel.first = true; App.refreshHer(); if (App.pollSort) App.pollSort(); }
   }
   $('#amOn').addEventListener('change', (e) => App.saveSettings({ ambient: { enabled: e.target.checked } }));
-  $('#amPlace').addEventListener('change', (e) => App.saveSettings({ ambient: { place: e.target.value.trim() || 'Indore' } }));
+  $('#amPlace').addEventListener('change', (e) => App.saveSettings({ ambient: { place: e.target.value.trim() || 'Sironj' } }));
   $('#slOn').addEventListener('change', (e) => App.saveSettings({ sleep: { enabled: e.target.checked } }));
   $('#slFrom').addEventListener('change', (e) => App.saveSettings({ sleep: { from: Math.floor(+e.target.value), fromMin: +e.target.value % 1 ? 30 : 0 } }));
   $('#slTo').addEventListener('change', (e) => App.saveSettings({ sleep: { to: +e.target.value } }));

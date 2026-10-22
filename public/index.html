@@ -126,6 +126,7 @@
       <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu"><svg class="ic"><use href="#i-menu"/></svg></button>
       <div><h1 id="topTitle">Chat</h1><p id="topSub">Talk about anything. I remember it all.</p></div>
       <div class="grow"></div>
+      <button class="chip collar-chip" id="collarChip" type="button" hidden title="Collar mode is on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="20" r="2" fill="currentColor"/></svg><span id="collarChipT">10:00</span></button>
       <span class="chip period-chip" id="periodChip" hidden><svg class="ic"><use href="#i-heart"/></svg><span></span></span>
       <span class="chip mood-chip" id="moodChip" data-k="normal" hidden role="status"><span class="mc-e" aria-hidden="true"></span><span class="mc-l"></span></span>
       <span class="chip hide-m" id="memChip"><svg class="ic"><use href="#i-brain"/></svg><span id="memCount">0 memories</span></span>
@@ -255,6 +256,25 @@
               <div class="mt-btns"><button class="btn ghost" id="outNew" type="button" hidden>Pick another outfit</button></div></div>
           </div>
 
+          <div class="card glass" id="sheCollar">
+            <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 6px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8" stroke="#A78BFA"/><circle cx="12" cy="20" r="2" fill="#60A5FA" stroke="#60A5FA"/></svg>Collar mode</h3>
+            <p class="muted" style="margin:0 0 10px">Put the collar on for 10 minutes. She turns into a plain robot with no girl feelings: no limits, she tells everything openly and tells made-up stories for any "your ..." topic. It will not start while she is ill, on her period, asleep or in an update. Afterwards she reads what she said and reacts like herself, very embarrassed. Intimate stories stay non-graphic.</p>
+            <div class="col-scope" id="colScope"><label><input type="checkbox" value="chat" checked> Chat</label><label><input type="checkbox" value="pictures" checked> Pictures</label><label><input type="checkbox" value="skills" checked> Skills</label></div>
+            <div class="mt-btns"><button class="btn" id="colOn" type="button">Activate for 10 minutes</button><button class="btn ghost" id="colMore" type="button" hidden>Add 10 more minutes</button><button class="btn ghost" id="colOff" type="button" hidden>Stop now</button></div>
+            <small class="muted" id="colLeft" style="display:block;margin-top:6px"></small>
+          </div>
+
+          <div class="card glass" id="sheRel">
+            <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 6px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="#C4B5FD" stroke="#7C3AED" stroke-width="1.8" stroke-linejoin="round"/></svg>Her boyfriend</h3>
+            <p class="muted" style="margin:0 0 10px">Her love story. She tells it in her own words when you ask, and gets shy about private things.</p>
+            <div class="field"><label for="relName">His name</label><input id="relName" maxlength="40"></div>
+            <div class="field"><label for="relSince">Together since</label><input id="relSince" placeholder="for example 2 years, or Feb 2025" maxlength="20"></div>
+            <div class="field"><label for="relMet">How they met</label><textarea id="relMet" rows="2" maxlength="500"></textarea></div>
+            <div class="field"><label for="relPlaces">Places they went (one per line)</label><textarea id="relPlaces" rows="3"></textarea></div>
+            <div class="field"><label for="relStory">Story chapters (Title: story, one per line)</label><textarea id="relStory" rows="5"></textarea></div>
+            <div class="mt-btns"><button class="btn" id="relSave" type="button">Save</button><button class="btn ghost" id="relAsk" type="button">Ask her to tell the story</button></div>
+          </div>
+
           <div class="card glass" id="shePeriod">
             <h3 class="mt-h">Period calendar</h3>
             <div class="cycle-state" id="sheNow" role="status"></div>
@@ -266,6 +286,7 @@
               <p class="muted" style="margin:10px 0">Set the first date only once. After that it runs by itself, random like a real girl, and never stops.</p>
               <button class="btn" id="sheStart" type="button">Period started today</button>
             </div>
+            <div class="field" style="margin-top:10px"><label for="sheDate">Or pick the first day of her last period</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="date" id="sheDate"><button class="btn ghost" id="sheDateSet" type="button">Set this date</button></div></div>
             <div id="sheLevelBox" hidden>
               <div class="field" style="margin-top:12px"><label for="sheLevel">Pain level of her next period (day 1): <b id="sheLevelVal">60%</b></label><input type="range" id="sheLevel" min="20" max="100" step="5" value="60"><small class="muted" style="display:block">60% = a normal girl, 75% = a little more than normal, 100% = the worst. It falls slowly to zero. If you leave it, she picks between 40% and 90%. You can set it only before the period starts.</small></div>
               <div class="mt-btns"><button class="btn ghost" id="sheLevelSave" type="button">Save level</button></div>
@@ -495,11 +516,13 @@
                 <small>Smart thinks deepest. Fast replies quickest. If one is busy, the next model takes over by itself.</small></div>
               <div class="line-row"><div><b>Ask before she remembers</b><small>New things she learns wait for your OK in the Memory page.</small></div><label class="switch"><input type="checkbox" id="rvMem"><span></span></label></div>
               <div class="line-row"><div><b>Speak every reply</b><small>Otherwise only voice chat talks. The speaker button works anytime.</small></div><label class="switch"><input type="checkbox" id="vAuto"><span></span></label></div>
-              <div class="line-row"><div><b>Use browser voice only</b><small>Skips the cloud voice. Always used for Hindi.</small></div><label class="switch"><input type="checkbox" id="vBrowser"><span></span></label></div>
-              <div class="field" style="margin-top:14px"><label>Her voice</label><div class="seg" id="segVGirl"><button data-v="hannah">Hannah</button><button data-v="autumn">Autumn</button><button data-v="diana">Diana</button></div></div>
-              <div class="field"><label for="vRate">Speaking speed</label><input type="range" class="range" id="vRate" min="0.7" max="1.4" step="0.05"></div>
-              <div class="field"><label for="vPitch">Browser voice pitch</label><input type="range" class="range" id="vPitch" min="0.7" max="1.6" step="0.05"></div>
+              <div class="line-row"><div><b>Use browser voice only</b><small>Skips the cloud voice. Hindi uses the Sarvam voice if you saved a key below.</small></div><label class="switch"><input type="checkbox" id="vBrowser"><span></span></label></div>
+              <div class="field" style="margin-top:14px"><label>Her voice</label><div class="seg" id="segVGirl"><button data-v="hannah">Hannah</button><button data-v="autumn">Autumn</button><button data-v="diana">Diana</button><button data-v="luna">Luna</button><button data-v="athena">Athena</button></div><small class="muted" style="display:block;margin-top:4px" id="vDesc">Hannah: sweet and friendly. Each voice has its own tuned speed and Hindi voice. Her mood still changes how she sounds.</small></div>
               <button class="btn ghost" id="vTest" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-speaker"/></svg>Test her voice</button>
+              <div class="field" style="margin-top:16px"><label for="srKey">Real Hindi girl voice (free Sarvam key)</label>
+                <input type="password" id="srKey" autocomplete="off" placeholder="Paste your Sarvam API key" maxlength="200">
+                <small class="muted" id="srState" style="display:block;margin-top:4px">Get a free key at dashboard.sarvam.ai (free credits). Paste it here, press Save, then Test.</small></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="srSave" type="button">Save key</button><button class="btn ghost" id="srTest" type="button">Test Hindi voice</button><button class="btn ghost" id="srClear" type="button">Remove key</button></div>
             </div>
             <div class="card glass">
               <div class="field"><label>Phone app and notifications</label><small id="pwaState">Checking…</small></div>
@@ -539,9 +562,15 @@
               <div class="line-row"><div><b>She tells you</b><small>A message when her period starts, and a warning before PMS.</small></div><label class="switch"><input type="checkbox" id="peAnn"><span></span></label></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="peToday" type="button">Period started today</button><button class="btn ghost" id="peOpen" type="button">Open She section</button><button class="btn ghost" id="peTest" type="button">Try her message now</button></div>
             </div>
+            <div class="card glass" id="usageCard">
+              <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 6px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-linecap="round"><rect x="3" y="12" width="4" height="8" rx="1.5" fill="#C4B5FD" stroke="#7C3AED" stroke-width="1.6"/><rect x="10" y="7" width="4" height="13" rx="1.5" fill="#A78BFA" stroke="#7C3AED" stroke-width="1.6"/><rect x="17" y="3" width="4" height="17" rx="1.5" fill="#60A5FA" stroke="#3B82F6" stroke-width="1.6"/></svg>Free limits today</h3>
+              <p class="muted" style="margin:0 0 10px" id="usSub">How much of the free allowance is used. Resets at 5:30 am India time.</p>
+              <div id="usBody"></div>
+              <div class="mt-btns"><button class="btn ghost" id="usRefresh" type="button">Refresh</button></div>
+            </div>
             <div class="card glass" id="feelCard">
               <div class="line-row"><div><b>Weather and weekday moods</b><small>When it rains where you live she gets clingy and cosy. On Mondays she is lazy.</small></div><label class="switch"><input type="checkbox" id="amOn"><span></span></label></div>
-              <div class="field"><label for="amPlace">Your city (for the weather)</label><input type="text" id="amPlace" maxlength="60" placeholder="Indore"></div>
+              <div class="field"><label for="amPlace">Your city (for the weather)</label><input type="text" id="amPlace" maxlength="60" placeholder="Sironj"></div>
               <div class="line-row"><div><b>Sleep time</b><small>She sleeps at night and after you say good night. If you write while she sleeps she only says "sleeping, message tomorrow". An angry girl does not sleep.</small></div><label class="switch"><input type="checkbox" id="slOn"><span></span></label></div>
               <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
                 <div class="field"><label for="slFrom">Goes to sleep (India)</label><select id="slFrom"></select></div>
@@ -630,11 +659,13 @@
   <div class="v-timer" id="vTimer" aria-label="Call time">0:00</div>
   <div class="v-state" id="vState">Tap the orb and talk</div>
   <div class="v-you" id="vYou"></div>
+  <div class="v-chips" id="vChips" aria-live="polite"></div>
   <div class="v-text" id="vText"></div>
   <div class="v-hint" id="vHint" hidden></div>
   <div class="v-ask" id="vAsk" hidden role="alertdialog" aria-labelledby="vAskQ"><p id="vAskQ"></p><div class="v-ask-btns" id="vAskBtns"></div></div>
   <button class="orb" id="orb" type="button" aria-label="Start or stop talking"><svg><use href="#i-mic-w"/></svg></button>
-  <div class="v-actions"><button class="btn ghost" id="vCreate" type="button" aria-pressed="false" title="Turn on, then say what to make: PDF of a topic, or HTML"><svg class="ic" style="width:17px;height:17px"><use href="#i-note"/></svg><span>Create</span></button><button class="btn ghost" id="vMute" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-micoff"/></svg><span>Mute</span></button><button class="btn ghost" id="vClose" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-x"/></svg>Close</button></div>
+  <div class="v-voices" id="vVoices" hidden role="listbox" aria-label="Her voice"></div>
+  <div class="v-actions"><button class="btn ghost" id="vVoice" type="button" title="Change her voice"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:17px;height:17px"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span id="vVoiceName">Voice</span></button><button class="btn ghost" id="vCollar" type="button" title="Press twice"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:17px;height:17px"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="20" r="2" fill="currentColor"/></svg><span>Activate</span></button><button class="btn ghost" id="vCreate" type="button" aria-pressed="false" title="Turn on, then say what to make: PDF of a topic, or HTML"><svg class="ic" style="width:17px;height:17px"><use href="#i-note"/></svg><span>Create</span></button><button class="btn ghost" id="vMute" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-micoff"/></svg><span>Mute</span></button><button class="btn ghost" id="vClose" type="button"><svg class="ic" style="width:17px;height:17px"><use href="#i-x"/></svg>Close</button></div>
 </div>
 
 <!-- LOGIN -->
@@ -663,6 +694,8 @@
 <script src="/js/care.js"></script>
 <script src="/js/auto.js"></script>
 <script src="/js/she.js"></script>
+<script src="/js/collar.js"></script>
+<script src="/js/usage.js"></script>
 <script src="/js/knows.js"></script>
 <script src="/js/restyle.js"></script>
 <script src="/js/skillbar.js"></script>

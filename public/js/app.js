@@ -26,6 +26,12 @@
     clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
   };
 
+  // any uncaught error shows a message instead of a silent dead button
+  let errAt = 0;
+  const oops = (m) => { if (Date.now() - errAt < 3000) return; errAt = Date.now(); try { App.toast('Something broke: ' + String(m || 'unknown').slice(0, 120)); } catch (e) {} };
+  window.addEventListener('error', (e) => { if (e && e.message && !/ResizeObserver|Script error/.test(e.message)) oops(e.message); });
+  window.addEventListener('unhandledrejection', (e) => { const r = e && e.reason; if (r && r.status === 401) return; oops(r && r.message ? r.message : r); });
+
   // ---------- api ----------
   App.api = async (path, opts = {}) => {
     const headers = { ...(opts.headers || {}) };
@@ -93,10 +99,13 @@
   function inline(t) {
     const codes = [];
     t = t.replace(/`([^`\n]+)`/g, (m, c) => { codes.push('<code>' + c + '</code>'); return '\u0000' + (codes.length - 1) + '\u0000'; });
+    const Q = '(&quot;|["“”])';
+    t = t.replace(new RegExp('\\*{1,3}\\s*' + Q + '|' + Q + '\\s*\\*{1,3}', 'g'), (m, a, b) => a || b);          // stray *" and "*
     t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>')
       .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
       .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+    t = t.replace(/(\S)\*+(?=\s|$)|(^|\s)\*+(?=\S)/g, (m, a, b) => (a || '') + (b || ''));                  // leftover lone asterisks
     return t.replace(/\u0000(\d+)\u0000/g, (m, i) => codes[+i]);
   }
   App.md = (src) => {
@@ -307,7 +316,11 @@
     const paint = () => { raf = 0; if (!bubble) return; const st = nearBottom(); bubble._md.innerHTML = App.md(full); if (st) toBottom(); };
     let reply = null;
     try {
-      const res = await App.api('/api/chat', { raw: true, signal: controller.signal, body: { convId: App.convId, text, via: opts.via || 'text', spoken: !!opts.spoken, noteId: App.noteId || null } });
+      let res;
+      for (let a = 0; ; a++) {                                       // a dropped connection before any answer: try again quietly (up to 2 times)
+        try { res = await App.api('/api/chat', { raw: true, signal: controller.signal, body: { convId: App.convId, text, via: opts.via || 'text', spoken: !!opts.spoken, noteId: App.noteId || null } }); break; }
+        catch (e) { if (e instanceof TypeError && a < 2 && !controller.signal.aborted) { await wait(900 * (a + 1)); continue; } throw e; }
+      }
       if (!res.ok || !(res.headers.get('content-type') || '').includes('ndjson')) {
         const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Something went wrong.');
       }
@@ -418,7 +431,7 @@
     if (App.hooks.onSettings) App.hooks.onSettings(s);
   };
   App.saveSettings = async (patch) => {
-    try { const s = await App.api('/api/settings', { method: 'PUT', body: patch }); App.applySettings(s); return s; }
+    try { const s = await App.api('/api/settings', { method: 'PUT', body: patch }); App.applySettings(s); if (App.paintVoices) App.paintVoices(); return s; }
     catch (e) { App.toast(e.message); }
   };
 

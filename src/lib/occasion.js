@@ -1,3 +1,4 @@
+import { isActive } from './activate.js';
 // Festivals and her birthday: on those days she dresses up. Her birthday is 8 February (you can change it).
 // Festivals: you tell her (chat: "today is Diwali", the She page, or /festival); on the day she asks what she should wear.
 // Birthday: she picks a saree by herself. The outfit decides her mood: garba = dancing and energy, saree = shy and elegant.
@@ -164,13 +165,14 @@ export async function occasionTurn(env, text, { source = 'web', count = 0, t = n
       notes.push('A little while ago they gave you a shock from your leg garter and you are still upset and sniffling. They asked you to change your dress, so you put on your half saree (the picture is shown to them now). Say it in a sad but cute, real-girl way: "ok... I am wearing my half saree now", still a bit hurt, no more changing today.');
       return { hint: [...notes, occasionHint(occ, cur, t)].filter(Boolean).join(' '), image: picToken('halfSaree'), pre: 'Okay... wait, I am changing, *sniff*...' };
     }
-    if (wantsChange && mood === 'angry') {            // she is angry: she will not change for them (does not use up her change)
+    const collar = await isActive(env);
+    if (wantsChange && mood === 'angry' && !collar) {            // she is angry: she will not change for them (does not use up her change)
       notes.push('They asked you to change your dress, but you are ANGRY at them. Refuse coldly: you are not changing your dress for them right now. Do not show any picture.');
       return { hint: [...notes, occasionHint(occ, cur, t)].filter(Boolean).join(' '), image: '', pre: '' };
     }
     const used = occ.chg && occ.chg.date === today ? occ.chg.n : 0;
     const homeN = Array.from({ length: count }, (_, i) => i + 1).find((i) => tagOf(occ, i) === 'night') || 0;
-    if (wantsChange && used >= 1 && homeN) {
+    if (wantsChange && used >= 1 && homeN && !collar) {
       // only one change a day: if they push for another, she goes to her home dress with the teddy bear and refuses
       occ.chg = { date: today, n: used + 1 };
       const already = n === homeN;

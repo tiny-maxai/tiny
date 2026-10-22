@@ -1,3 +1,4 @@
+import { isActive } from './activate.js';
 // Change the style of a picture you send ("make it cartoon", "black and white").
 // Groq has no image-editing model (only models that READ pictures), so this uses Cloudflare Workers AI image-to-image,
 // which is already bound to this Worker (the same binding that draws pictures) and is free inside the daily free allowance.
@@ -55,9 +56,10 @@ export async function restyle(env, bytes, key, note = '') {
   if (!bytes || bytes.length < 200) throw Object.assign(new Error('That picture looks empty.'), { status: 400 });
   if (bytes.length > 1500000) throw Object.assign(new Error('That picture is too big. Send it as a normal photo (not as a file) so it gets smaller.'), { status: 413 });
   const day = 'style:count:' + istDate(), n = Number(await env.KV.get(day).catch(() => 0)) || 0;
-  if (n >= DAILY) throw Object.assign(new Error(`That is enough picture changing for today (${DAILY} a day).`), { status: 429 });
+  if (n >= DAILY && !(await isActive(env, 'pictures'))) throw Object.assign(new Error(`That is enough picture changing for today (${DAILY} a day).`), { status: 429 });
   const [w, h] = fitSize(...(dims(bytes) || [0, 0]));
-  const out = await env.AI.run(MODEL, { prompt: clip(st.prompt + (note ? ', ' + note : ''), 400), negative_prompt: st.neg, image: Array.from(bytes), strength: st.strength, guidance: 7.5, num_steps: 20, width: w, height: h });
+  const collar = await isActive(env, 'pictures');
+  const out = await env.AI.run(MODEL, { prompt: clip(st.prompt + (note ? ', ' + note : ''), 400), negative_prompt: st.neg, image: Array.from(bytes), strength: Math.min(0.85, st.strength + (collar ? 0.05 : 0)), guidance: collar ? 9 : 7.5, num_steps: 20, width: w, height: h });
   let buf;
   if (out && typeof out.getReader === 'function') buf = new Uint8Array(await new Response(out).arrayBuffer());
   else if (out instanceof ArrayBuffer) buf = new Uint8Array(out);

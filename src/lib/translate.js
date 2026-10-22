@@ -29,3 +29,16 @@ Keep the whole answer short.`;
   const r = await complete(env, { brain: 'fast', temperature: 0.3, maxTokens: 500, messages: [{ role: 'system', content: sys }, { role: 'user', content: clip(s, 1500) }] });
   return r.text;
 }
+
+// Voice mode talks Hindi and English only. Anything else is translated: Indian languages to Hindi, the rest to English.
+const INDIC = /^(urdu|punjabi|gujarati|marathi|bengali|nepali|sanskrit|sindhi|assamese)$/;
+export async function toHindiOrEnglish(env, text, language = '') {
+  const lang = String(language || '').toLowerCase();
+  const dev = /[\u0900-\u097F]/.test(text), latin = !/[^\u0000-\u024F\s\d\p{P}]/u.test(text);
+  if (lang === 'hindi' || lang === 'english' || (!lang && (dev || latin))) return { text, lang: lang || (dev ? 'hindi' : 'english'), translated: false };
+  const target = INDIC.test(lang) ? 'Hindi in Devanagari' : 'natural English';
+  try {
+    const r = await complete(env, { brain: 'fast', temperature: 0.2, maxTokens: 400, messages: [{ role: 'system', content: `Translate what the speaker said into ${target}. Keep the meaning, feeling and casual tone. Reply with only the translation.` }, { role: 'user', content: clip(text, 1200) }] });
+    return { text: r.text.trim() || text, lang: lang || 'other', translated: true, original: text };
+  } catch (e) { return { text, lang: lang || 'other', translated: false }; }
+}

@@ -13,7 +13,7 @@ export const DEFAULTS = {
   outfit: { enabled: true },                              // she picks an outfit picture each morning
   battery: { enabled: true, limit: 20, chargeMinutes: 5 },   // every message of yours uses battery; at 0 she faints and must charge
   briefing: { enabled: true, hour: 8 },              // a morning message: weather, today's reminders, birthdays, and a line in her mood
-  ambient: { enabled: true, place: 'Indore' },        // rain makes her clingy, Monday makes her lazy
+  ambient: { enabled: true, place: 'Sironj' },        // rain makes her clingy, Monday makes her lazy
   tinyMood: 'auto',                                 // auto | normal | happy | hyper | flirty | clingy | sassy | sulky | sad | angry | jealous | in_pain | moody | sleepy
   sleep: { enabled: true, from: 22, fromMin: 30, to: 6, v2: true },        // she sleeps 10:30 pm to 6 am (India time), and right after you say good night after 9 pm
   her: { nakhre: true, nakhrePerDay: 3, react: true, promises: true, maxAngerHours: 12, sunday: true },   // period-day texts + nakhre when ignored; moods that follow the way you talk; follow up on your promises; longest she stays angry
@@ -59,7 +59,7 @@ export function clean(raw) {
     chat: { bubbles: ch.bubbles !== false, tease: ch.tease !== false, dayTexts: Math.min(8, Math.max(1, parseInt(ch.dayTexts, 10) || 4)) },
     habits: { enabled: hb.enabled !== false, hour: Math.min(23, Math.max(0, hb.hour === undefined ? 20 : (parseInt(hb.hour, 10) || 0))), goal: Math.min(20, Math.max(1, parseInt(hb.goal, 10) || 8)) },
     tinyMood: MOOD_CHOICES.includes(r.tinyMood) ? r.tinyMood : 'auto',
-    ambient: { enabled: am.enabled !== false, place: str(am.place, 60) || 'Indore' },
+    ambient: { enabled: am.enabled !== false, place: (/^indore$/i.test(str(am.place, 60)) ? '' : str(am.place, 60)) || 'Sironj' },
     battery: { enabled: ba.enabled !== false, limit: Math.min(100, Math.max(5, parseInt(ba.limit, 10) || 20)), chargeMinutes: Math.min(60, Math.max(1, parseInt(ba.chargeMinutes, 10) || 5)) },
     briefing: { enabled: br.enabled !== false, hour: Math.min(11, Math.max(5, parseInt(br.hour, 10) || 8)) },
     sleep: (() => {
@@ -76,7 +76,7 @@ export function clean(raw) {
       autoplay: v.autoplay === true,
       rate: Math.min(1.6, Math.max(0.6, Number(v.rate) || 1)),
       pitch: Math.min(1.8, Math.max(0.6, Number(v.pitch) || 1.25)),
-      girl: ['hannah', 'autumn', 'diana'].includes(v.girl) ? v.girl : 'hannah',
+      girl: ['hannah', 'autumn', 'diana', 'luna', 'athena'].includes(v.girl) ? v.girl : 'hannah',
       boy: ['troy', 'austin', 'daniel'].includes(v.boy) ? v.boy : 'troy',
     },
   };

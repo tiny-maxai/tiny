@@ -1,3 +1,4 @@
+import { endedNow, isActive, blockedNow, endCollar } from './activate.js';
 // She reaches out on her own: the daily mood check-in, and "I miss you" when you have been away.
 // Runs from the every-minute cron (checks only every 10 minutes). Needs phone notifications or Telegram to reach you.
 import { now, istDate, clip } from './util.js';
@@ -337,6 +338,8 @@ export async function runCare(env, { force = null } = {}) {
 export async function wakeTick(env) {
   { const st9 = await getSettings(env); await shockTick(env, st9).catch((e) => console.error('[shock]', e && e.message)); await sickTick(env, st9).catch((e) => console.error('[sick]', e && e.message)); }
   await autoTick(env).catch((e) => console.error('[auto]', e && e.message));
+  if (await isActive(env, null).catch(() => false)) { if (await blockedNow(env).catch(() => '')) await endCollar(env).catch(() => null); }          // she fell asleep, got ill or her period started
+  else if (await endedNow(env).catch(() => false)) await endCollar(env).catch(() => null);                                                       // time is up: she reads what she said
   const t = now(), her = await getHer(env);
   if (her.batt && (her.batt.used > 0 || her.batt.slept || her.batt.chargeUntil)) {
     const st0 = await getSettings(env);

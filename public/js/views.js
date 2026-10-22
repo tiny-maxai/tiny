@@ -41,7 +41,6 @@
     if (document.activeElement !== $('#uName')) $('#uName').value = s.userName;
     if (document.activeElement !== $('#pCustom')) $('#pCustom').value = s.persona.custom;
     $('#vAuto').checked = s.voice.autoplay; $('#vBrowser').checked = s.voice.engine === 'browser';
-    $('#vRate').value = s.voice.rate; $('#vPitch').value = s.voice.pitch;
   }
   function wirePersona() {
     if (personaReady) return; personaReady = true;
@@ -87,8 +86,6 @@
     $('#pCustom').addEventListener('input', debounce(() => App.saveSettings({ persona: { custom: $('#pCustom').value } }), 900));
     $('#vAuto').addEventListener('change', (e) => App.saveSettings({ voice: { autoplay: e.target.checked } }));
     $('#vBrowser').addEventListener('change', (e) => App.saveSettings({ voice: { engine: e.target.checked ? 'browser' : 'auto' } }));
-    $('#vRate').addEventListener('input', debounce(() => App.saveSettings({ voice: { rate: +$('#vRate').value } })));
-    $('#vPitch').addEventListener('input', debounce(() => App.saveSettings({ voice: { pitch: +$('#vPitch').value } })));
     $('#logout').addEventListener('click', App.logout);
     $('#bkNow').addEventListener('click', async (e) => { e.currentTarget.disabled = true; try { const r = await App.api('/api/backup', { method: 'POST', body: {} }); App.toast(`Backed up ${r.memories} memories and ${r.messages} messages`); } catch (er) { App.toast(er.message); } e.currentTarget.disabled = false; });
     $('#bkExport').addEventListener('click', async () => {

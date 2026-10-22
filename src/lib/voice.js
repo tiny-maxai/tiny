@@ -2,7 +2,7 @@
 import { b64ToBytes, bytesToB64 } from './util.js';
 import { groqFetch, hasGroq } from './groq.js';
 
-export async function speechToText(env, bytes, mime = 'audio/webm', language) {
+export async function speechToText(env, bytes, mime = 'audio/webm', language, detail = false) {
   const errors = [];
   if (hasGroq(env)) {
     try {
@@ -10,18 +10,18 @@ export async function speechToText(env, bytes, mime = 'audio/webm', language) {
       const ext = /ogg/.test(mime) ? 'ogg' : /mp4|m4a|aac/.test(mime) ? 'm4a' : /wav/.test(mime) ? 'wav' : /mpeg|mp3/.test(mime) ? 'mp3' : 'webm';
       fd.append('file', new Blob([bytes], { type: mime }), `voice.${ext}`);
       fd.append('model', 'whisper-large-v3-turbo');
-      fd.append('response_format', 'json');
+      fd.append('response_format', detail ? 'verbose_json' : 'json');
       fd.append('temperature', '0');
       if (language) fd.append('language', language);
       const r = await groqFetch(env, 'stt', (key) => fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: fd }));
       const d = await r.json().catch(() => ({}));
-      if (r.ok && typeof d.text === 'string') return d.text.trim();
+      if (r.ok && typeof d.text === 'string') return detail ? { text: d.text.trim(), language: String(d.language || '').toLowerCase() } : d.text.trim();
       errors.push('groq: ' + (d?.error?.message || r.status));
     } catch (e) { errors.push('groq: network'); }
   }
   try {
     const r = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: bytesToB64(bytes) });
-    if (r && typeof r.text === 'string') return r.text.trim();
+    if (r && typeof r.text === 'string') return detail ? { text: r.text.trim(), language: '' } : r.text.trim();
   } catch (e) { errors.push('cf: ' + (e && e.message)); }
   console.error('[stt] failed', errors.join(' | '));
   throw Object.assign(new Error('I could not understand the audio. Please try again.'), { status: 502 });
@@ -54,17 +54,30 @@ function wavFromPcm(pcm, rate = 24000) {
 // Her voice follows her mood: slower and softer when sleepy or sad, brighter when happy. (The browser voice does the same in voice.js.)
 const MOOD_PACE = { sleepy: 0.82, sleeping: 0.82, sad: 0.88, in_pain: 0.85, clingy: 0.92, flirty: 0.95, sulky: 0.95, moody: 0.97, happy: 1.05, sassy: 1.05, jealous: 1.05, love: 0.93, hurt: 0.86, hate: 1.08, angry: 1.1, hyper: 1.18 };
 const CHEERFUL = new Set(['happy', 'hyper', 'flirty', 'sassy']);
-async function hindiSpeech(env, text, girl, errors, mp3Only, mood) {
-  if (env.SARVAM_API_KEY) {
+let skCache = { v: '', at: 0 };
+export async function sarvamKey(env) {                          // a key set in Cloudflare wins; otherwise the one pasted into Settings
+  if (env.SARVAM_API_KEY) return env.SARVAM_API_KEY;
+  if (Date.now() - skCache.at < 300000) return skCache.v;
+  let v = ''; try { v = (await env.KV.get('secret:sarvam')) || ''; } catch (e) { /* none */ }
+  skCache = { v, at: Date.now() }; return v;
+}
+export const setSarvamKey = async (env, k) => { skCache = { v: k || '', at: Date.now() }; if (k) await env.KV.put('secret:sarvam', k); else await env.KV.delete('secret:sarvam'); };
+async function hindiSpeech(env, text, girl, errors, mp3Only, mood, vc) {
+  const key = await sarvamKey(env);
+  if (key) {
     try {
-      const speaker = (girl ? env.SARVAM_GIRL : env.SARVAM_BOY) || (girl ? 'priya' : 'aditya');
-      const base = { text: text.slice(0, 1500), speaker, model: env.SARVAM_MODEL || 'bulbul:v3', pace: MOOD_PACE[mood] || 1.0, output_audio_codec: 'mp3', speech_sample_rate: 24000 };
+      const main = (girl ? (vc && vc.sarvam) || env.SARVAM_GIRL : env.SARVAM_BOY) || (girl ? 'priya' : 'aditya');
+      const speakers = [...new Set([main, girl ? (env.SARVAM_GIRL || 'priya') : 'aditya'])];       // if a name is not accepted, the plain default takes over
+      const pace = Math.min(1.5, Math.max(0.6, (MOOD_PACE[mood] || 1.0) * ((vc && vc.pace) || 1)));
+      for (const speaker of speakers) {
+      const base = { text: text.slice(0, 1500), speaker, model: env.SARVAM_MODEL || 'bulbul:v3', pace, output_audio_codec: 'mp3', speech_sample_rate: 24000 };
       for (const field of ['language_code', 'target_language_code']) {
-        const r = await fetch(env.SARVAM_TTS_URL || 'https://api.sarvam.ai/text-to-speech', { method: 'POST', headers: { 'Content-Type': 'application/json', 'api-subscription-key': env.SARVAM_API_KEY }, body: JSON.stringify({ ...base, [field]: 'hi-IN' }) });
+        const r = await fetch(env.SARVAM_TTS_URL || 'https://api.sarvam.ai/text-to-speech', { method: 'POST', headers: { 'Content-Type': 'application/json', 'api-subscription-key': key }, body: JSON.stringify({ ...base, [field]: 'hi-IN' }) });
         const d = await r.json().catch(() => ({}));
         if (r.ok && d.audios && d.audios[0]) { const bytes = b64ToBytes(d.audios[0]); if (bytes.length > 500) return { bytes, mime: 'audio/mpeg', ext: 'mp3', engine: 'sarvam' }; }
         if (r.status !== 422 && r.status !== 400) { errors.push('sarvam ' + r.status); break; }
         errors.push('sarvam ' + r.status + ' ' + JSON.stringify(d).slice(0, 100));
+      }
       }
     } catch (e) { errors.push('sarvam: ' + (e && e.message)); }
   }
@@ -85,7 +98,15 @@ async function hindiSpeech(env, text, girl, errors, mp3Only, mood) {
   return null;
 }
 
-export const GIRL_VOICES = ['hannah', 'autumn', 'diana'];
+// Five girl voices, each with the best settings found for it: the English voice, the Hindi (Sarvam) speaker and a natural pace.
+export const VOICE_SET = {
+  hannah: { label: 'Hannah', engine: 'orpheus', orpheus: 'hannah', sarvam: 'priya', pace: 1.0 },      // sweet and friendly (default)
+  autumn: { label: 'Autumn', engine: 'orpheus', orpheus: 'autumn', sarvam: 'ritu', pace: 0.97 },      // soft and calm
+  diana: { label: 'Diana', engine: 'orpheus', orpheus: 'diana', sarvam: 'kavya', pace: 1.04 },        // bright and bubbly
+  luna: { label: 'Luna', engine: 'aura', aura: 'luna', sarvam: 'neha', pace: 1.02 },                  // young and light
+  athena: { label: 'Athena', engine: 'aura', aura: 'athena', sarvam: 'pooja', pace: 0.97 },           // mature and confident
+};
+export const GIRL_VOICES = Object.keys(VOICE_SET);
 export const BOY_VOICES = ['troy', 'austin', 'daniel'];
 
 async function toBytes(r) {
@@ -105,17 +126,19 @@ export async function textToSpeech(env, text, opts = {}) {
   text = String(text || '').trim().slice(0, 1000);
   if (!text) throw Object.assign(new Error('Nothing to say.'), { status: 400 });
   const girl = opts.gender !== 'boy';
+  const vc = girl ? VOICE_SET[opts.voice] || VOICE_SET.hannah : null;
   const errors = [];
   if (looksHindi(text, opts.language)) {
-    const h = await hindiSpeech(env, text, girl, errors, !!opts.mp3, opts.mood);
+    const h = await hindiSpeech(env, text, girl, errors, !!opts.mp3, opts.mood, vc);
     if (h) return h;
   }
   if (!canSpeakOnServer(text)) throw Object.assign(new Error('Hindi uses the browser voice until a Hindi voice key is added.'), { status: 422 });
 
-  if (hasGroq(env) && !opts.mp3) {
+  const orpheus = async () => {
+    if (!hasGroq(env) || opts.mp3) return null;
     try {
       const pool = girl ? GIRL_VOICES : BOY_VOICES;
-      const voice = pool.includes(opts.voice) ? opts.voice : pool[0];
+      const voice = girl ? (vc.orpheus || 'hannah') : (pool.includes(opts.voice) ? opts.voice : pool[0]);
       const style = opts.style ? `[${opts.style}] ` : girl && (!opts.mood || CHEERFUL.has(opts.mood)) ? '[cheerful] ' : '';       // no cheerful voice when she is sad, angry or sleepy
       const r = await groqFetch(env, 'tts', (key) => fetch((env.GROQ_TTS_URL || 'https://api.groq.com/openai/v1/audio/speech'), {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -124,18 +147,32 @@ export async function textToSpeech(env, text, opts = {}) {
       if (r.ok) { const bytes = new Uint8Array(await r.arrayBuffer()); if (bytes.length > 500) return { bytes, mime: 'audio/wav', ext: 'wav', engine: 'orpheus' }; }
       else errors.push('orpheus ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120));
     } catch (e) { errors.push('orpheus: ' + (e && e.message)); }
-  }
-  if (env.AI) {
+    return null;
+  };
+  const aura = async () => {
+    if (!env.AI) return null;
     try {
-      const speaker = (girl ? env.TTS_AURA_GIRL : env.TTS_AURA_BOY) || (girl ? 'luna' : 'orion');
+      const speaker = (girl ? (vc && vc.aura) || env.TTS_AURA_GIRL : env.TTS_AURA_BOY) || (girl ? 'luna' : 'orion');
       const bytes = await toBytes(await env.AI.run('@cf/deepgram/aura-2-en', { text, speaker, encoding: 'mp3' }));
       if (bytes && bytes.length > 500) return { bytes, mime: 'audio/mpeg', ext: 'mp3', engine: 'aura' };
     } catch (e) { errors.push('aura: ' + (e && e.message)); }
+    return null;
+  };
+  const melo = async () => {
+    if (!env.AI) return null;
     try {
       const bytes = await toBytes(await env.AI.run('@cf/myshell-ai/melotts', { prompt: text, lang: 'en' }));
       if (bytes && bytes.length > 500) return { bytes, mime: 'audio/mpeg', ext: 'mp3', engine: 'melo' };
     } catch (e) { errors.push('melo: ' + (e && e.message)); }
-  }
+    return null;
+  };
+  for (const f of (girl && vc.engine === 'aura') || opts.mp3 ? [aura, orpheus, melo] : [orpheus, aura, melo]) { const r = await f(); if (r) return r; }
   console.error('[tts] all voices failed', errors.join(' | '));
   throw Object.assign(new Error('Voice is unavailable right now.'), { status: 502 });
+}
+
+// Settings "Test the Hindi voice": says one Hindi line with Sarvam only, and tells you why if it cannot.
+export async function testSarvam(env) {
+  const errors = [], h = await hindiSpeech(env, 'नमस्ते, मैं टिनी हूँ। आज तुम कैसे हो?', true, errors, true, '');
+  return h && h.engine === 'sarvam' ? { ok: true, h } : { ok: false, errors: errors.length ? errors : [(await sarvamKey(env)) ? 'no sound came back' : 'no Sarvam key is set'] };
 }

@@ -135,6 +135,7 @@
   $('#calPrev').addEventListener('click', () => { const [y, m] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, m - 2, 1)); load(null, d.toISOString().slice(0, 7)); });
   $('#calNext').addEventListener('click', () => { const [y, m] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, m, 1)); load(null, d.toISOString().slice(0, 7)); });
   $('#sheStart').addEventListener('click', async () => { if (await act({ action: 'periodStart' })) { App.toast('Okay... her period started today. Be nice to her!'); App.flashPose && App.flashPose('cry', 4000); } });
+  $('#sheDateSet').addEventListener('click', async () => { const v = $('#sheDate').value; if (!v) return App.toast('Pick a date first.'); if (await act({ action: 'periodStart', date: v })) App.toast('Saved. Her cycle counts from ' + v + '.'); });
   $('#sheLevel').addEventListener('input', (e) => { $('#sheLevelVal').textContent = e.target.value + '%'; });
   $('#sheLevelSave').addEventListener('click', async () => { if (await act({ action: 'periodLevel', level: +$('#sheLevel').value })) App.toast('Saved. Her next period starts at ' + $('#sheLevel').value + '%.'); });
   $('#feAdd').addEventListener('click', async () => { if (await act({ action: 'festAdd', name: $('#feName').value, date: $('#feDate').value, yearly: true })) { $('#feName').value = ''; App.toast('Saved. On that day she will ask what to wear.'); } });
@@ -147,4 +148,16 @@
   $('#outNew').addEventListener('click', () => act({ action: 'outfit' }));
   const orig = App.showView;
   App.showView = (v) => { orig(v); if (v === 'she' || v === 'skills') load(); };
+})();
+// ---- her boyfriend ----
+(function () {
+  const $ = (q) => document.querySelector(q);
+  const fill = (r) => { if (!r || !$('#relName')) return; $('#relName').value = r.name || ''; $('#relSince').value = r.since || ''; $('#relMet').value = r.met || ''; $('#relPlaces').value = (r.places || []).join('\n'); $('#relStory').value = (r.chapters || []).map((c) => c.title + ': ' + c.text).join('\n'); };
+  const get = async () => { try { fill((await App.api('/api/she')).rel); } catch (e) { App.toast(e.message); } };
+  $('#relSave').addEventListener('click', async () => {
+    const chapters = $('#relStory').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(':'); return i > 0 && i < 60 ? { title: l.slice(0, i).trim(), text: l.slice(i + 1).trim() } : { title: '', text: l }; });
+    try { const d = await App.api('/api/she', { body: { action: 'relSave', name: $('#relName').value, since: $('#relSince').value, met: $('#relMet').value, places: $('#relPlaces').value, chapters } }); fill(d.rel); App.toast('Saved.'); } catch (e) { App.toast(e.message); }
+  });
+  $('#relAsk').addEventListener('click', () => { const i = $('#input'); App.showView('chat'); if (i) { i.value = 'Tell me the story of you and your boyfriend, where did you two go?'; i.dispatchEvent(new Event('input')); i.focus(); } });
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('[data-view="she"]')) get(); });
 })();

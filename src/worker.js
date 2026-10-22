@@ -1,3 +1,6 @@
+import { instrument, track, flush, usageView } from './lib/usage.js';
+import { relOf, saveRel } from './lib/rel.js';
+import { startActivate, stopActivate, endCollar, extendActivate, activateView } from './lib/activate.js';
 // Memory AI: one Worker serves the website (public/) and the API (/api/*).
 import { docText } from './lib/docs.js';
 import { makeFile } from './lib/files.js';
@@ -11,7 +14,8 @@ import { prepareChat, finishChat, sleepTurn } from './lib/chat.js';
 import { remember, forget, updateMemory, vecDelete, getPending, resolvePending } from './lib/memory.js';
 import { listNotes, getNote, createNote, saveNote, deleteNote } from './lib/notes.js';
 import { listTasks, createTask, parseTask, runTask, runDueTasks } from './lib/tasks.js';
-import { speechToText, textToSpeech } from './lib/voice.js';
+import { speechToText, textToSpeech, sarvamKey, setSarvamKey, testSarvam } from './lib/voice.js';
+import { toHindiOrEnglish } from './lib/translate.js';
 import { listLists, getList, createList, saveList, deleteList, tidyPoints } from './lib/lists.js';
 import { addSub, removeSub, listSubs, sendPush, pushReady } from './lib/push.js';
 import { notifyOwner } from './lib/notify.js';
@@ -29,7 +33,7 @@ import { startCharge, batteryView, usePowerBank, powerLine, nightCharge } from '
 import { isSleeping, moodNow } from './lib/her.js';
 import { sendStickerToOwner } from './lib/telegram.js';
 import { sickOf, sickView, careSick, makeSick, SICK } from './lib/sick.js';
-import { imageBytes } from './lib/extras.js';
+import { imageBytes, voiceStyle } from './lib/extras.js';
 import { shockTick, startShock, shockView, levelOf } from './lib/shock.js';
 import { sundayStory } from './lib/maint.js';
 import { statusOf, periodView, monthOf, bondOf, prefsOf, cleanPrefs } from './lib/she.js';
@@ -70,7 +74,8 @@ async function readJson(request) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env0, ctx) {
+    const env = instrument(env0); track('req');
     const url = new URL(request.url);
     const p = url.pathname;
     if (p.startsWith('/img/')) {                       // pictures she drew (the id is a long random word)
@@ -80,15 +85,17 @@ export default {
     if (!p.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (p !== '/api/health') await ensureSchema(env);
-      return await route(request, env, ctx, url, p);
+      const res = await route(request, env, ctx, url, p); ctx.waitUntil(flush(env).catch(() => null)); return res;
     } catch (e) {
       console.error('[api]', p, e && e.stack || e);
       return json({ error: e.message || 'Something went wrong.' }, e.status || 500);
     }
   },
 
-  async scheduled(event, env, ctx) {
+  async scheduled(event, env0, ctx) {
+    const env = instrument(env0); track('req');
     await ensureSchema(env);
+    ctx.waitUntil(flush(env, true).catch(() => null));
     if (event.cron === '* * * * *') {
       ctx.waitUntil(runDueTasks(env).catch((e) => console.error('[tasks]', e)));
       ctx.waitUntil(careTick(env, event.scheduledTime).catch((e) => console.error('[care]', e)));
@@ -252,6 +259,25 @@ async function route(request, env, ctx, url, p) {
     }
   }
 
+  if (p === '/api/voice/sarvam/test' && m === 'POST') {
+    const r = await testSarvam(env);
+    if (!r.ok) return json({ error: 'Sarvam did not work: ' + r.errors.join('; ').slice(0, 220) }, 422);
+    return new Response(r.h.bytes, { headers: { 'Content-Type': r.h.mime, 'X-Voice-Engine': 'sarvam' } });
+  }
+  if (p === '/api/voice/sarvam') {
+    if (m === 'POST') { const b = await readJson(request); const k = String(b.key || '').trim(); if (b.clear) await setSarvamKey(env, ''); else if (k.length < 12 || /\s/.test(k)) return json({ error: 'That does not look like a key. Copy the whole key from the Sarvam dashboard.' }, 400); else await setSarvamKey(env, k); }
+    return json({ set: !!(await sarvamKey(env)), viaEnv: !!env.SARVAM_API_KEY });
+  }
+  if (p === '/api/usage' && m === 'GET') return json(await usageView(env));
+  if (p === '/api/activate') {
+    if (m === 'POST') {
+      const b = await readJson(request); let r = { ok: true };
+      if (b.stop) { const was = (await activateView(env)).on; const reaction = was ? await endCollar(env) : ''; return json({ ...(await activateView(env)), reaction }); } else if (b.extend) r = await extendActivate(env); else r = await startActivate(env, b.scope);
+      if (!r.ok) return json({ error: r.error, ...(await activateView(env)) }, 429);
+    }
+    return json(await activateView(env));
+  }
+
   // ---------- She: everything about her ----------
   if (p === '/api/she') {
     const st = await getSettings(env), her = await getHer(env), t = now();
@@ -265,11 +291,15 @@ async function route(request, env, ctx, url, p) {
       else if (a === 'skillDel') { delSkill(her, String(b.id || '')); dirty = true; }
       else if (a === 'skillEdit') { const r = editSkill(her, String(b.id || ''), { name: b.name, prompt: b.prompt }); if (r.error) return json({ error: r.error }, 400); dirty = true; }
       else if (a === 'skillMemDel') { forgetSkillMem(her, String(b.id || ''), b.i === undefined ? 'all' : b.i); dirty = true; }
+      else if (a === 'relSave') { saveRel(her, b); dirty = true; }
       else if (a === 'prefs') { her.prefs = { ...(her.prefs || {}), ...cleanPrefs(b.prefs) }; dirty = true; }
       else if (a === 'periodStart') {
         if (st.persona.gender !== 'girl') return json({ error: 'Periods are only for the girl character.' }, 400);
-        if (st.period.lastStart) return json({ error: 'The first date is already set. After that it runs by itself.' }, 400);
-        await saveSettings(env, { period: { lastStart: istDate(t) } });
+        const today = istDate(t); let d = String(b.date || '').slice(0, 10);
+        if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: 'Pick a proper date.' }, 400);
+        if (!d) { if (st.period.lastStart) return json({ error: 'The first date is already set. Pick a date above to change it.' }, 400); d = today; }
+        if (d > today) return json({ error: 'That date is in the future. Pick today or an earlier day.' }, 400);
+        await saveSettings(env, { period: { lastStart: d } });
       } else if (a === 'periodLevel') {
         if (!st.period.lastStart) return json({ error: 'Press "Period started today" once first.' }, 400);
         if (!pr || !pr.canSetLevel) return json({ error: 'Her period has already started. You can set the level before the next one begins.' }, 400);
@@ -295,7 +325,7 @@ async function route(request, env, ctx, url, p) {
       period: periodView(st2, t), month: monthOf(st2, /^\d{4}-\d{2}$/.test(ym) ? ym : today.slice(0, 7)), today,
       diary: await listDiary(env), outfitCount: await outfitCount(env).catch(() => 0),
       occasion: await (async () => { const occ = await getOcc(env), cnt = await outfitCount(env).catch(() => 0); return { birthday: occ.birthday, upcoming: upcoming(occ, t), today: todayOccasions(occ, t), tags: TAGS, wardrobe: Array.from({ length: cnt }, (_, i) => ({ n: i + 1, tag: tagOf(occ, i + 1) })), wearing: (outfit && outfit.n) || 0 }; })(),
-      skills: allSkills(her), sick: sickView(her), sickKinds: SICK.map((x) => ({ k: x.k, name: x.name })), bond: await bondOf(env), prefs: prefsOf(her),
+      rel: relOf(her), skills: allSkills(her), sick: sickView(her), sickKinds: SICK.map((x) => ({ k: x.k, name: x.name })), bond: await bondOf(env), prefs: prefsOf(her),
     });
   }
 
@@ -392,6 +422,11 @@ async function route(request, env, ctx, url, p) {
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (bytes.length < 200) return json({ error: 'That recording was empty.' }, 400);
     const lang = url.searchParams.get('lang') || undefined;
+    if (url.searchParams.get('voice')) {                       // voice mode: Hindi or English only
+      const d = await speechToText(env, bytes, (request.headers.get('Content-Type') || 'audio/webm').split(';')[0], lang, true);
+      const r = await toHindiOrEnglish(env, d.text, d.language);
+      return json({ text: r.text, lang: r.lang, translated: r.translated, original: r.original || '' });
+    }
     const text = await speechToText(env, bytes, (request.headers.get('Content-Type') || 'audio/webm').split(';')[0], lang);
     return json({ text });
   }
@@ -401,7 +436,7 @@ async function route(request, env, ctx, url, p) {
     try {
       const st = await getSettings(env);
       const mood = await moodKindNow(env, st).catch(() => null);
-      const v = await textToSpeech(env, text, { mood, gender: st.persona.gender, language: st.persona.language, voice: st.persona.gender === 'boy' ? st.voice.boy : st.voice.girl });
+      const v = await textToSpeech(env, ['angry', 'hate', 'jealous', 'angry'].includes(mood) ? text.replace(/!+/g, '.') : text, { mood, style: voiceStyle(mood), gender: st.persona.gender, language: ['hindi', 'hinglish', 'english'].includes(b.lang) ? b.lang : st.persona.language, voice: st.persona.gender === 'boy' ? st.voice.boy : st.voice.girl });
       return new Response(v.bytes, { headers: { 'Content-Type': v.mime, 'X-Voice-Engine': v.engine, 'Cache-Control': 'private, max-age=86400' } });
     } catch (e) { return json({ error: e.message, fallback: true }, e.status || 502); }
   }

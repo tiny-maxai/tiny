@@ -5,24 +5,25 @@ import { now, clip } from './util.js';
 const IST = 330 * 60 * 1000;
 const RAIN = new Set([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
 const WORD = { 0: 'clear sky', 1: 'mostly clear', 2: 'partly cloudy', 3: 'cloudy', 45: 'foggy', 48: 'foggy', 51: 'light drizzle', 53: 'drizzle', 55: 'heavy drizzle', 56: 'freezing drizzle', 57: 'freezing drizzle', 61: 'light rain', 63: 'rain', 65: 'heavy rain', 66: 'freezing rain', 67: 'freezing rain', 71: 'light snow', 73: 'snow', 75: 'heavy snow', 80: 'rain showers', 81: 'rain showers', 82: 'heavy rain showers', 95: 'a thunderstorm', 96: 'a thunderstorm with hail', 99: 'a thunderstorm with hail' };
-const DEFAULT_PLACE = { name: 'Indore', lat: 22.7196, lon: 75.8577 };
+const DEFAULT_PLACE = { name: 'Sironj', lat: 24.1, lon: 77.69 };      // Sironj, Vidisha district, Madhya Pradesh
 let mem = null;                                   // { key, t, v }: per isolate, 10 minutes
 
 async function locate(env, place) {
-  const name = clip(String(place || 'Indore').trim() || 'Indore', 60), key = 'geo:' + name.toLowerCase();
+  const name = clip(String(place || 'Sironj').trim() || 'Sironj', 60), key = 'geo:' + name.toLowerCase();
+  if (/^sironj$/i.test(name)) return DEFAULT_PLACE;
   try { const c = await env.KV.get(key, 'json'); if (c && Number.isFinite(c.lat)) return c; } catch { /* look it up */ }
   try {
     const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=' + encodeURIComponent(name), { signal: AbortSignal.timeout(3500) });
     const d = await r.json(), g = d && d.results && d.results[0];
     if (g) { const v = { name: g.name, lat: g.latitude, lon: g.longitude }; await env.KV.put(key, JSON.stringify(v)).catch(() => {}); return v; }
   } catch { /* fall back */ }
-  return /indore/i.test(name) ? DEFAULT_PLACE : null;
+  return /sironj/i.test(name) ? DEFAULT_PLACE : null;
 }
 
 export async function getWeather(env, settings) {
   const a = settings && settings.ambient;
   if (!a || !a.enabled) return null;
-  const key = String(a.place || 'Indore').toLowerCase(), t = now();
+  const key = String(a.place || 'Sironj').toLowerCase(), t = now();
   if (mem && mem.key === key && t - mem.t < 10 * 60000) return mem.v;
   let kv = null;
   try { kv = await env.KV.get('weather:cur', 'json'); } catch { /* ignore */ }

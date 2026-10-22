@@ -1,3 +1,4 @@
+import { startActivate, endCollar, isActive } from './activate.js';
 // Telegram bot: same brain, same memories as the website. Only OWNER_TG_ID may talk to it.
 import { startShock, shockView, levelOf } from './shock.js';
 import { statusText, setQuiet, parseQuiet, quietLeft, SOOTHE_ROWS, wantsSootheButtons, soothePress, speechKind, shapeSpeech, voiceStyle, moodPace, typos, makeImage, imageBytes, SICK_BTN } from './extras.js';
@@ -66,7 +67,7 @@ const react = (env, chat, messageId, emoji) => api(env, 'setMessageReaction', { 
 const BTN_STYLE = { 'soothe:sorry': 'primary', 'soothe:gift': 'success', 'soothe:joke': 'danger', 'soothe:calm': 'success', 'sick:med': 'danger', 'sick:soup': 'success', 'sick:rest': 'primary', 'mood:1': 'danger', 'mood:2': 'danger', 'mood:3': 'primary', 'mood:4': 'success', 'mood:5': 'success' };
 const styleFor = (d) => BTN_STYLE[d] || (/^wear:/.test(d) ? 'success' : /^water:/.test(d) ? 'primary' : undefined);
 // The "/" menu: Telegram shows these when you type "/" or tap the menu button, so you never have to remember commands.
-const COMMANDS = [['skills', 'Her skills (tap one to use it)'], ['status', 'How she is right now'], ['mood', 'Her mood'], ['diary', 'Read her last diary page'], ['lists', 'Your checklists (tick them here)'], ['report', 'Her update report card'], ['today', 'Ideas for today'], ['water', 'Log your water'], ['health', 'Her health report'], ['image', 'Ask her to draw a picture'], ['style', 'Change a photo style (send a photo first)'], ['sick', 'Care for her when she is ill'], ['quiet', 'Quiet hours'], ['dates', 'Birthdays she remembers'], ['new', 'Start a fresh chat']];
+const COMMANDS = [['skills', 'Her skills (tap one to use it)'], ['status', 'How she is right now'], ['mood', 'Her mood'], ['diary', 'Read her last diary page'], ['lists', 'Your checklists (tick them here)'], ['report', 'Her update report card'], ['activate', 'Collar mode for 10 minutes (/activate stop to end)'], ['today', 'Ideas for today'], ['water', 'Log your water'], ['health', 'Her health report'], ['image', 'Ask her to draw a picture'], ['style', 'Change a photo style (send a photo first)'], ['sick', 'Care for her when she is ill'], ['quiet', 'Quiet hours'], ['dates', 'Birthdays she remembers'], ['new', 'Start a fresh chat']];
 async function ensureMenu(env) {
   const key = 'tg:cmds:v1';
   if (await env.KV.get(key).catch(() => 'x')) return;
@@ -98,7 +99,7 @@ export async function sendVoice(env, chat, text) {
   try {
     const st = await getSettings(env);
     const mk = await moodKindNow(env, st).catch(() => null), sk = speechKind(await getHer(env), st, mk);
-    const v = await textToSpeech(env, shapeSpeech(clip(plainForSpeech(text), 900), sk), { mood: mk, style: voiceStyle(sk), gender: st.persona.gender, language: st.persona.language, mp3: true });
+    const v = await textToSpeech(env, shapeSpeech(clip(plainForSpeech(text), 900), sk), { mood: mk, style: voiceStyle(sk), voice: st.persona.gender === 'boy' ? st.voice.boy : st.voice.girl, gender: st.persona.gender, language: st.persona.language, mp3: true });
     const post = (method, field) => { const fd = new FormData(); fd.append('chat_id', String(chat)); fd.append(field, new Blob([v.bytes], { type: v.mime }), 'reply.' + v.ext); return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', body: fd }).then((r) => r.json()).catch(() => ({})); };
     const r = await post('sendVoice', 'voice');                       // a real voice-note bubble
     if (!r || !r.ok) await post('sendAudio', 'audio');                // fallback: audio file
@@ -345,6 +346,11 @@ async function processMessage(env, msg) {
     for (let i = 0; i < list.length; i += 2) rows.push(list.slice(i, i + 2).map((x) => ({ text: x.name + (x.waiting ? ' (soon)' : ''), data: 'skl:' + x.slug, style: 'primary' })));
     await sendWithButtons(env, chat, 'My skills. Tap one, then ask me your question and I will use it for the full answer. (I also use them by myself when it fits. You can type /skill-cooking how do I make paneer too.)', rows);
     return;
+  }
+  if (/^\/activate\b/i.test(cmd)) {
+    if (/stop|off/i.test(restParts.join(' '))) { const was = await isActive(env, null); if (!was) { await send(env, chat, 'Collar mode is not on.'); return; } const rx = await endCollar(env, { notify: false }); await send(env, chat, rx); return; }
+    const r0 = await startActivate(env); if (!r0.ok) { await send(env, chat, r0.error); return; }
+    await send(env, chat, 'Collar mode is ON for 10 minutes. Ask me anything, I will say yes. Send /activate stop to end it early.'); return;
   }
   if (/^\/diary\b/i.test(cmd)) { const d = (await listDiary(env))[0]; await send(env, chat, d ? `${d.date}\n\n${d.text}` : 'I have not written a diary page yet. I write one every night.'); return; }
   if (/^\/report\b/i.test(cmd)) { await send(env, chat, cardText(updateCard(await getHer(env), settings), settings.persona.name)); return; }
